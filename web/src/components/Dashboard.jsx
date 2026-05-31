@@ -12,6 +12,29 @@ const DEFAULT_SOURCE = {
   label: 'Open-Meteo',
 };
 
+function formatJakartaTimestamp(value) {
+  if (!value) return 'No data';
+
+  const [datePart, timePart = '00:00:00'] = value.split(/[ T]/);
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute, second] = timePart.split(':').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, hour - 7, minute, second));
+
+  if (Number.isNaN(date.getTime())) return 'No data';
+
+  const formattedTimestamp = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+
+  return `${formattedTimestamp} WIB`;
+}
+
 const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [readings, setReadings] = useState([]);
@@ -66,6 +89,10 @@ const Dashboard = () => {
 
   const selectedSourceLabel = readingSources.find((source) => source.name === selectedSource)?.label
     || DEFAULT_SOURCE.label;
+  const latestUpdate = readings.reduce((latest, reading) => {
+    if (!reading.measured_on || reading.measured_on <= latest) return latest;
+    return reading.measured_on;
+  }, '');
 
   useEffect(() => {
     const fetchKecamatanNames = async () => {
@@ -235,7 +262,12 @@ const Dashboard = () => {
           {stats ? (
             <>
               <div className="flex items-center justify-between mt-2 mb-2">
-                <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Overview</h2>
+                <div>
+                  <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Overview</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Latest {selectedSourceLabel} update: {formatJakartaTimestamp(latestUpdate)}
+                  </p>
+                </div>
                 <button 
                   onClick={handleOpenHistory}
                   className="flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-2.5 py-1 rounded-md transition-colors"
@@ -288,7 +320,11 @@ const Dashboard = () => {
       </div>
 
       <div className="flex-1 h-full p-4 relative bg-slate-900/50">
-        <MapView focusedLocation={selectedLocation} onResetLocation={handleResetLocation} />
+        <MapView
+          focusedLocation={selectedLocation}
+          onResetLocation={handleResetLocation}
+          onSelectLocation={selectLocation}
+        />
       </div>
 
       {/* History Modal */}

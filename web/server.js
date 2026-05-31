@@ -724,7 +724,13 @@ app.get('/api/kecamatan/latest', async (req, res) => {
           kr.pm2_5,
           kr.pm10,
           kr.nitrogen_dioxide,
-          kr.ozone
+          kr.ozone,
+          kr.sulphur_dioxide,
+          kr.carbon_monoxide,
+          kr.aerosol_optical_depth,
+          kr.dust,
+          kr.uv_index,
+          kr.european_aqi
         FROM kecamatan k
         LEFT JOIN kecamatan_readings kr ON kr.kecamatan_id = k.id
           AND kr.measured_on = (

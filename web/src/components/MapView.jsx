@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getAqiColor } from '../data/aqi';
 import { BarChart2, Layers, MapPin } from 'lucide-react';
@@ -16,7 +16,45 @@ const HEATMAP_LAYER_TYPES = [
   { label: 'US AQI', value: 'US_AQI' },
   { label: 'PM2.5', value: 'PM25_INDIGO_PERSIAN' },
 ];
+const BASEMAP_OPTIONS = [
+  {
+    id: 'dark',
+    label: 'Dark',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  },
+  {
+    id: 'street',
+    label: 'Street',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  },
+  {
+    id: 'satellite',
+    label: 'Satellite',
+    attribution: 'Tiles &copy; Esri',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  },
+  {
+    id: 'topographic',
+    label: 'Topographic',
+    attribution: 'Tiles &copy; Esri',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+  },
+];
 const DEFAULT_REFRESH_INTERVAL_HOURS = 1;
+const DISTRICT_METRICS = [
+  { field: 'pm2_5', label: 'PM2.5', unit: 'ug/m3' },
+  { field: 'pm10', label: 'PM10', unit: 'ug/m3' },
+  { field: 'nitrogen_dioxide', label: 'Nitrogen dioxide (NO2)', unit: 'ppb' },
+  { field: 'ozone', label: 'Ozone (O3)', unit: 'ppb' },
+  { field: 'sulphur_dioxide', label: 'Sulphur dioxide (SO2)', unit: 'ppb' },
+  { field: 'carbon_monoxide', label: 'Carbon monoxide (CO)', unit: 'ppb' },
+  { field: 'aerosol_optical_depth', label: 'Aerosol optical depth', unit: '' },
+  { field: 'dust', label: 'Dust', unit: 'ug/m3' },
+  { field: 'uv_index', label: 'UV index', unit: '' },
+  { field: 'european_aqi', label: 'European AQI', unit: '' },
+];
 
 function getAqiHexColor(aqi) {
   if (aqi === null || aqi === undefined) return '#334155';
@@ -31,6 +69,14 @@ function getAqiHexColor(aqi) {
 function formatMetric(value, decimals = 1) {
   if (value === null || value === undefined) return 'No data';
   return Number(value).toFixed(decimals);
+}
+
+function formatStoredMetric(value, unit = '') {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return 'No data';
+  }
+
+  return `${Number(value).toFixed(2)}${unit ? ` ${unit}` : ''}`;
 }
 
 function getFeatureBounds(feature) {
@@ -70,14 +116,16 @@ const MapController = ({ centerMapTrigger, focusedFeature }) => {
   return null;
 };
 
-const MapView = ({ focusedLocation, onResetLocation }) => {
+const MapView = ({ focusedLocation, onResetLocation, onSelectLocation }) => {
   const [centerMapTrigger, setCenterMapTrigger] = useState(0);
   const [districtGeoJson, setDistrictGeoJson] = useState(null);
   const [hasGoogleAQ, setHasGoogleAQ] = useState(false);
   const [mapMode, setMapMode] = useState('clean');
+  const [selectedBasemapId, setSelectedBasemapId] = useState('dark');
   const [selectedLayerType, setSelectedLayerType] = useState('UAQI_INDIGO_PERSIAN');
   const [kecamatanReadings, setKecamatanReadings] = useState([]);
   const [refreshIntervalHours, setRefreshIntervalHours] = useState(DEFAULT_REFRESH_INTERVAL_HOURS);
+  const [popupState, setPopupState] = useState({ districtName: null, version: 0 });
 
   const kecamatanByName = useMemo(() => {
     return new Map(kecamatanReadings.map((reading) => [reading.name, reading]));
@@ -95,9 +143,19 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
     ) || null;
   }, [districtGeoJson, focusedLocation]);
 
+  const selectedBasemap = BASEMAP_OPTIONS.find((option) => option.id === selectedBasemapId)
+    || BASEMAP_OPTIONS[0];
+
+  const popupReading = kecamatanByName.get(popupState.districtName);
+  const popupPosition = popupReading
+    && Number.isFinite(Number(popupReading.centroid_lat))
+    && Number.isFinite(Number(popupReading.centroid_lon))
+    ? [Number(popupReading.centroid_lat), Number(popupReading.centroid_lon)]
+    : null;
+
   const modeOptions = useMemo(() => {
     const options = [
-      { mode: 'clean', icon: MapPin, label: 'Base Map' },
+      { mode: 'clean', icon: MapPin, label: 'No AQ Overlay' },
       { mode: 'choropleth', icon: BarChart2, label: 'Google AQ Districts' },
     ];
 
@@ -112,6 +170,21 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
     setCenterMapTrigger(prev => prev + 1);
     onResetLocation();
   };
+
+  const selectDistrict = (districtName) => {
+    onSelectLocation(districtName);
+    setPopupState(currentState => ({
+      districtName,
+      version: currentState.version + 1,
+    }));
+  };
+
+  useEffect(() => {
+    setPopupState(currentState => ({
+      districtName: focusedLocation,
+      version: currentState.version + 1,
+    }));
+  }, [focusedLocation]);
 
   useEffect(() => {
     const loadDistrictBoundaries = async () => {
@@ -201,12 +274,12 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
       opacity: 0.85,
       fillColor: isFocused
         ? '#3b82f6'
-        : mapMode === 'choropleth' ? getAqiHexColor(aqi) : 'transparent',
-      fillOpacity: isFocused ? 0.35 : mapMode === 'choropleth' ? 0.65 : 0,
+        : mapMode === 'choropleth' ? getAqiHexColor(aqi) : '#ffffff',
+      fillOpacity: isFocused ? 0.35 : mapMode === 'choropleth' ? 0.65 : 0.01,
     };
   };
 
-  const bindDistrictTooltip = (feature, layer) => {
+  const bindDistrictInteractions = (feature, layer) => {
     const name = feature.properties?.name || 'Kecamatan';
     const reading = getDistrictReading(feature);
     const aqi = reading?.us_aqi ?? null;
@@ -216,16 +289,36 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
       ? 'No data'
       : `${formatMetric(reading.pm2_5)} µg/m³`;
 
-    layer.bindTooltip(
-      `<strong>${name}</strong><br>Provider: Google AQ<br>AQI: ${aqiText} - ${colorInfo.label}<br>PM2.5: ${pm25Text}`,
-      { sticky: true },
-    );
+    if (mapMode === 'choropleth') {
+      layer.bindTooltip(
+        `<strong>${name}</strong><br>Provider: Google AQ<br>AQI: ${aqiText} - ${colorInfo.label}<br>PM2.5: ${pm25Text}`,
+        { sticky: true },
+      );
+    }
+
+    layer.on('click', () => selectDistrict(name));
   };
 
   return (
     <div className="w-full h-full rounded-2xl overflow-hidden border border-slate-700/50 shadow-2xl relative z-0">
       <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-slate-600 bg-slate-800/90 shadow-lg backdrop-blur-sm">
+        <label className="flex w-fit items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/90 px-2.5 py-2 text-xs font-semibold text-slate-300 shadow-lg backdrop-blur-sm">
+          Basemap:
+          <select
+            value={selectedBasemapId}
+            onChange={(event) => setSelectedBasemapId(event.target.value)}
+            className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+          >
+            {BASEMAP_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex w-fit flex-wrap overflow-hidden rounded-lg border border-slate-600 bg-slate-800/90 shadow-lg backdrop-blur-sm">
+          <span className="px-2.5 py-2 text-xs font-semibold text-slate-300">AQ Overlay:</span>
           {modeOptions.map((option) => {
             const Icon = option.icon;
             const isActive = mapMode === option.mode;
@@ -289,18 +382,57 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
         zoomControl={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          key={selectedBasemap.id}
+          attribution={selectedBasemap.attribution}
+          url={selectedBasemap.url}
+          zIndex={0}
         />
 
         {hasGoogleAQ && mapMode === 'heatmap' && (
           <TileLayer
             url={`/api/tiles/${selectedLayerType}/{z}/{x}/{y}`}
             opacity={0.6}
+            zIndex={100}
           />
         )}
         
         <MapController centerMapTrigger={centerMapTrigger} focusedFeature={focusedFeature} />
+
+        {popupReading && popupPosition && (
+          <Popup
+            key={`${popupState.districtName}-${popupState.version}`}
+            position={popupPosition}
+            minWidth={280}
+            maxWidth={360}
+          >
+            <div className="min-w-[260px] text-slate-800">
+              <h3 className="text-base font-bold">Kecamatan {popupReading.name}</h3>
+              <p className="mb-2 text-xs text-slate-600">Google AQ centroid estimate</p>
+              <div className="mb-2 rounded bg-slate-100 px-2 py-1 text-xs">
+                <strong>US AQI:</strong>{' '}
+                {popupReading.us_aqi === null || popupReading.us_aqi === undefined
+                  ? 'No data'
+                  : `${Math.round(Number(popupReading.us_aqi))} - ${getAqiColor(Number(popupReading.us_aqi)).label}`}
+              </div>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs">
+                {DISTRICT_METRICS.map((metric) => (
+                  <React.Fragment key={metric.field}>
+                    <dt className="text-slate-600">{metric.label}</dt>
+                    <dd className="font-semibold text-slate-900">
+                      {formatStoredMetric(popupReading[metric.field], metric.unit)}
+                    </dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Updated: {popupReading.measured_on || 'No data'}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Centroid: {popupPosition[0].toFixed(5)}, {popupPosition[1].toFixed(5)}
+              </p>
+            </div>
+          </Popup>
+        )}
 
         {/* Kecamatan outlines without solid fill */}
         {districtGeoJson && (
@@ -308,7 +440,7 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
             key={`districts-${mapMode}-${focusedLocation}-${districtLayerKey}`}
             data={districtGeoJson} 
             style={getDistrictStyle}
-            onEachFeature={mapMode === 'choropleth' ? bindDistrictTooltip : undefined}
+            onEachFeature={bindDistrictInteractions}
           />
         )}
 
