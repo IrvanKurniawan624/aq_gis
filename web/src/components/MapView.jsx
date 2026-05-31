@@ -33,17 +33,44 @@ function formatMetric(value, decimals = 1) {
   return Number(value).toFixed(decimals);
 }
 
-const MapController = ({ centerMapTrigger }) => {
+function getFeatureBounds(feature) {
+  const points = [];
+
+  const collectPoints = (coordinates) => {
+    if (!Array.isArray(coordinates)) return;
+
+    if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
+      points.push([coordinates[1], coordinates[0]]);
+      return;
+    }
+
+    coordinates.forEach(collectPoints);
+  };
+
+  collectPoints(feature?.geometry?.coordinates);
+  return points;
+}
+
+const MapController = ({ centerMapTrigger, focusedFeature }) => {
   const map = useMap();
   
   useEffect(() => {
+    if (focusedFeature) {
+      const bounds = getFeatureBounds(focusedFeature);
+
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [32, 32], maxZoom: 14 });
+        return;
+      }
+    }
+
     map.flyTo(SURABAYA_CENTER, 12);
-  }, [centerMapTrigger, map]);
+  }, [centerMapTrigger, focusedFeature, map]);
 
   return null;
 };
 
-const MapView = () => {
+const MapView = ({ focusedLocation, onResetLocation }) => {
   const [centerMapTrigger, setCenterMapTrigger] = useState(0);
   const [districtGeoJson, setDistrictGeoJson] = useState(null);
   const [hasGoogleAQ, setHasGoogleAQ] = useState(false);
@@ -62,6 +89,12 @@ const MapView = () => {
       .join('|');
   }, [kecamatanReadings]);
 
+  const focusedFeature = useMemo(() => {
+    return districtGeoJson?.features?.find(
+      (feature) => feature.properties?.name === focusedLocation,
+    ) || null;
+  }, [districtGeoJson, focusedLocation]);
+
   const modeOptions = useMemo(() => {
     const options = [
       { mode: 'clean', icon: MapPin, label: 'Base Map' },
@@ -77,6 +110,7 @@ const MapView = () => {
 
   const handleReset = () => {
     setCenterMapTrigger(prev => prev + 1);
+    onResetLocation();
   };
 
   useEffect(() => {
@@ -159,13 +193,16 @@ const MapView = () => {
   const getDistrictStyle = (feature) => {
     const reading = getDistrictReading(feature);
     const aqi = reading?.us_aqi ?? null;
+    const isFocused = feature.properties?.name === focusedLocation;
 
     return {
-      color: '#e2e8f0',
-      weight: 1,
+      color: isFocused ? '#60a5fa' : '#e2e8f0',
+      weight: isFocused ? 4 : 1,
       opacity: 0.85,
-      fillColor: mapMode === 'choropleth' ? getAqiHexColor(aqi) : 'transparent',
-      fillOpacity: mapMode === 'choropleth' ? 0.65 : 0,
+      fillColor: isFocused
+        ? '#3b82f6'
+        : mapMode === 'choropleth' ? getAqiHexColor(aqi) : 'transparent',
+      fillOpacity: isFocused ? 0.35 : mapMode === 'choropleth' ? 0.65 : 0,
     };
   };
 
@@ -263,12 +300,12 @@ const MapView = () => {
           />
         )}
         
-        <MapController centerMapTrigger={centerMapTrigger} />
+        <MapController centerMapTrigger={centerMapTrigger} focusedFeature={focusedFeature} />
 
         {/* Kecamatan outlines without solid fill */}
         {districtGeoJson && (
           <GeoJSON 
-            key={`districts-${mapMode}-${districtLayerKey}`}
+            key={`districts-${mapMode}-${focusedLocation}-${districtLayerKey}`}
             data={districtGeoJson} 
             style={getDistrictStyle}
             onEachFeature={mapMode === 'choropleth' ? bindDistrictTooltip : undefined}

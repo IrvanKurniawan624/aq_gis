@@ -20,6 +20,8 @@ const Dashboard = () => {
   const [refreshIntervalMs, setRefreshIntervalMs] = useState(DEFAULT_REFRESH_INTERVAL_MS);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState(null);
+  const [kecamatanNames, setKecamatanNames] = useState([]);
+  const [selectedLocation, setSelectedLocation] = useState(null);
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -65,19 +67,39 @@ const Dashboard = () => {
   const selectedSourceLabel = readingSources.find((source) => source.name === selectedSource)?.label
     || DEFAULT_SOURCE.label;
 
-  const filteredReadings = useMemo(() => {
-    if (!searchQuery) return readings;
-    return readings.filter(r => 
-      (r.location_name || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery, readings]);
+  useEffect(() => {
+    const fetchKecamatanNames = async () => {
+      try {
+        const response = await axios.get('/api/kecamatan/latest');
+        const names = (response.data || [])
+          .map((reading) => reading.name)
+          .filter(Boolean)
+          .sort((left, right) => left.localeCompare(right));
+        setKecamatanNames(names);
+      } catch (error) {
+        console.warn('Could not load kecamatan names.', error.message);
+      }
+    };
+
+    fetchKecamatanNames();
+  }, []);
+
+  const matchingKecamatanNames = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    if (!normalizedQuery || selectedLocation) return [];
+
+    return kecamatanNames
+      .filter((name) => name.toLowerCase().includes(normalizedQuery))
+      .slice(0, 6);
+  }, [kecamatanNames, searchQuery, selectedLocation]);
 
   const stats = useMemo(() => {
-    if (filteredReadings.length === 0) return null;
-    const aqiValues = filteredReadings
+    if (readings.length === 0) return null;
+    const aqiValues = readings
       .map((reading) => reading.us_aqi === null ? Number.NaN : Number(reading.us_aqi))
       .filter(Number.isFinite);
-    const pm25Values = filteredReadings
+    const pm25Values = readings
       .map((reading) => reading.pm2_5 === null ? Number.NaN : Number(reading.pm2_5))
       .filter(Number.isFinite);
     const avgAqi = aqiValues.length > 0
@@ -88,12 +110,42 @@ const Dashboard = () => {
       : 'No data';
     
     return { avgAqi, avgPm25 };
-  }, [filteredReadings]);
+  }, [readings]);
+
+  const selectLocation = (locationName) => {
+    setSearchQuery(locationName);
+    setSelectedLocation(locationName);
+  };
+
+  const handleSearch = () => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const exactMatch = kecamatanNames.find((name) => name.toLowerCase() === normalizedQuery);
+    const nextLocation = exactMatch || matchingKecamatanNames[0];
+
+    if (nextLocation) {
+      selectLocation(nextLocation);
+    }
+  };
+
+  const handleSearchChange = (event) => {
+    setSearchQuery(event.target.value);
+    setSelectedLocation(null);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  const handleResetLocation = () => {
+    setSearchQuery('');
+    setSelectedLocation(null);
+  };
 
   const handleOpenHistory = () => {
-    // Default to the first city in the filtered list (usually Surabaya city_id = 1)
-    if (filteredReadings.length > 0) {
-      setSelectedCityId(filteredReadings[0].city_id);
+    if (readings.length > 0) {
+      setSelectedCityId(readings[0].city_id);
       setShowHistoryModal(true);
     }
   };
@@ -115,7 +167,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="px-6 mb-6">
+        <div className="relative px-6 mb-6">
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
             City Data Provider
           </p>
@@ -140,12 +192,43 @@ const Dashboard = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input 
               type="text" 
-              placeholder="Search locations..." 
+              placeholder="Search kecamatan..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg pl-10 pr-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-500"
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
+              className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg pl-10 pr-20 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-500"
             />
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md bg-blue-500/20 px-2 py-1 text-xs font-semibold text-blue-200 transition-colors hover:bg-blue-500/30"
+            >
+              Search
+            </button>
           </div>
+
+          {matchingKecamatanNames.length > 0 && (
+            <div className="absolute left-6 right-6 z-[1100] mt-1 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl">
+              {matchingKecamatanNames.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => selectLocation(name)}
+                  className="block w-full px-3 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {searchQuery.trim() && !selectedLocation && matchingKecamatanNames.length === 0 && (
+            <p className="mt-2 text-xs text-slate-500">No kecamatan found for this search.</p>
+          )}
+
+          {selectedLocation && (
+            <p className="mt-2 text-xs text-blue-300">Map focused on Kecamatan {selectedLocation}.</p>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pr-4 custom-scrollbar">
@@ -205,14 +288,14 @@ const Dashboard = () => {
       </div>
 
       <div className="flex-1 h-full p-4 relative bg-slate-900/50">
-        <MapView />
+        <MapView focusedLocation={selectedLocation} onResetLocation={handleResetLocation} />
       </div>
 
       {/* History Modal */}
       {showHistoryModal && selectedCityId && (
         <HistoryChart 
           cityId={selectedCityId} 
-          locationName={filteredReadings.find(r => r.city_id === selectedCityId)?.location_name || 'Selected Area'}
+          locationName={readings.find(r => r.city_id === selectedCityId)?.location_name || 'Selected Area'}
           source={selectedSource}
           sourceLabel={selectedSourceLabel}
           onClose={() => setShowHistoryModal(false)} 
