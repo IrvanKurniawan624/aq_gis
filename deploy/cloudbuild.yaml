@@ -1,0 +1,34 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - gcr.io/$PROJECT_ID/aq-gis-web:$COMMIT_SHA
+      - ./web
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - gcr.io/$PROJECT_ID/aq-gis-web:$COMMIT_SHA
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aq-gis-web
+      - --image=gcr.io/$PROJECT_ID/aq-gis-web:$COMMIT_SHA
+      - --region=asia-southeast2
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=3001
+      - --min-instances=0
+      - --max-instances=3
+      - --memory=512Mi
+      - --service-account=aq-gis-runner@$PROJECT_ID.iam.gserviceaccount.com
+      - --add-cloudsql-instances=$PROJECT_ID:asia-southeast2:aq-gis-mysql
+      - --set-secrets=GOOGLE_AQ_API_KEY=GOOGLE_AQ_API_KEY:latest,DB_PASSWORD=DB_PASSWORD:latest,REFRESH_TOKEN=REFRESH_TOKEN:latest
+      - --set-env-vars=DB_NAME=db_aq_gis,DB_USER=aq_gis,DB_SOCKET=/cloudsql/$PROJECT_ID:asia-southeast2:aq-gis-mysql
+
+images:
+  - gcr.io/$PROJECT_ID/aq-gis-web:$COMMIT_SHA

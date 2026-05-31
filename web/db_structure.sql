@@ -20,7 +20,7 @@ CREATE TABLE `air_quality_readings` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `city_id` bigint NOT NULL,
   `source_id` bigint NOT NULL,
-  `measured_on` date NOT NULL,
+  `measured_on` datetime NOT NULL,
   `frequency` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'daily',
   `resolution` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'modeled_city',
   `pm10` double DEFAULT NULL,
@@ -83,7 +83,7 @@ DROP TABLE IF EXISTS `air_quality_readings_geo`;
 
 /*!50001 CREATE TABLE  `air_quality_readings_geo`(
  `id` bigint ,
- `measured_on` date ,
+ `measured_on` datetime ,
  `frequency` varchar(80) ,
  `resolution` varchar(80) ,
  `geoname_id` bigint ,
@@ -112,7 +112,7 @@ DROP TABLE IF EXISTS `latest_air_quality_by_city`;
 
 /*!50001 CREATE TABLE  `latest_air_quality_by_city`(
  `id` bigint ,
- `measured_on` date ,
+ `measured_on` datetime ,
  `frequency` varchar(80) ,
  `resolution` varchar(80) ,
  `geoname_id` bigint ,
