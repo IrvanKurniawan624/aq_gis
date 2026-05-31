@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, useMap, Popup, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getAqiColor } from '../data/mockApiData';
+import { getAqiColor } from '../data/aqi';
 import { BarChart2, Layers, MapPin } from 'lucide-react';
 
 const SURABAYA_CENTER = [-7.2504, 112.7688];
@@ -16,6 +16,7 @@ const HEATMAP_LAYER_TYPES = [
   { label: 'US AQI', value: 'US_AQI' },
   { label: 'PM2.5', value: 'PM25_INDIGO_PERSIAN' },
 ];
+const DEFAULT_REFRESH_INTERVAL_HOURS = 1;
 
 function getAqiHexColor(aqi) {
   if (aqi === null || aqi === undefined) return '#334155';
@@ -32,30 +33,24 @@ function formatMetric(value, decimals = 1) {
   return Number(value).toFixed(decimals);
 }
 
-const MapController = ({ readings, centerMapTrigger }) => {
+const MapController = ({ centerMapTrigger }) => {
   const map = useMap();
   
   useEffect(() => {
     map.flyTo(SURABAYA_CENTER, 12);
   }, [centerMapTrigger, map]);
 
-  useEffect(() => {
-    if (readings && readings.length === 1) {
-       // Only 1 reading, just fly to it
-       map.flyTo([readings[0].latitude, readings[0].longitude], 12);
-    }
-  }, [readings, map]);
-
   return null;
 };
 
-const MapView = ({ readings }) => {
+const MapView = () => {
   const [centerMapTrigger, setCenterMapTrigger] = useState(0);
   const [districtGeoJson, setDistrictGeoJson] = useState(null);
   const [hasGoogleAQ, setHasGoogleAQ] = useState(false);
   const [mapMode, setMapMode] = useState('clean');
   const [selectedLayerType, setSelectedLayerType] = useState('UAQI_INDIGO_PERSIAN');
   const [kecamatanReadings, setKecamatanReadings] = useState([]);
+  const [refreshIntervalHours, setRefreshIntervalHours] = useState(DEFAULT_REFRESH_INTERVAL_HOURS);
 
   const kecamatanByName = useMemo(() => {
     return new Map(kecamatanReadings.map((reading) => [reading.name, reading]));
@@ -69,12 +64,12 @@ const MapView = ({ readings }) => {
 
   const modeOptions = useMemo(() => {
     const options = [
-      { mode: 'clean', icon: MapPin, title: 'Clean map' },
-      { mode: 'choropleth', icon: BarChart2, title: 'District choropleth' },
+      { mode: 'clean', icon: MapPin, label: 'Base Map' },
+      { mode: 'choropleth', icon: BarChart2, label: 'Google AQ Districts' },
     ];
 
     if (hasGoogleAQ) {
-      options.splice(1, 0, { mode: 'heatmap', icon: Layers, title: 'Google AQ heatmap' });
+      options.splice(1, 0, { mode: 'heatmap', icon: Layers, label: 'Google AQ Heatmap' });
     }
 
     return options;
@@ -113,7 +108,13 @@ const MapView = ({ readings }) => {
 
         const config = await response.json();
         const googleEnabled = Boolean(config.hasGoogleAQ);
+        const intervalHours = Number(config.fetchIntervalHours);
         setHasGoogleAQ(googleEnabled);
+        setRefreshIntervalHours(
+          Number.isFinite(intervalHours) && intervalHours > 0
+            ? intervalHours
+            : DEFAULT_REFRESH_INTERVAL_HOURS,
+        );
         setMapMode(currentMode => {
           if (currentMode === 'heatmap' && !googleEnabled) return 'clean';
           if (currentMode === 'clean' && googleEnabled) return 'heatmap';
@@ -143,7 +144,13 @@ const MapView = ({ readings }) => {
     };
 
     loadKecamatanReadings();
-  }, []);
+    const refreshTimer = setInterval(
+      loadKecamatanReadings,
+      refreshIntervalHours * 60 * 60 * 1000,
+    );
+
+    return () => clearInterval(refreshTimer);
+  }, [refreshIntervalHours]);
 
   const getDistrictReading = (feature) => {
     return kecamatanByName.get(feature.properties?.name);
@@ -173,7 +180,7 @@ const MapView = ({ readings }) => {
       : `${formatMetric(reading.pm2_5)} µg/m³`;
 
     layer.bindTooltip(
-      `<strong>${name}</strong><br>AQI: ${aqiText} - ${colorInfo.label}<br>PM2.5: ${pm25Text}`,
+      `<strong>${name}</strong><br>Provider: Google AQ<br>AQI: ${aqiText} - ${colorInfo.label}<br>PM2.5: ${pm25Text}`,
       { sticky: true },
     );
   };
@@ -191,14 +198,14 @@ const MapView = ({ readings }) => {
                 key={option.mode}
                 type="button"
                 onClick={() => setMapMode(option.mode)}
-                title={option.title}
-                className={`p-2 transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold transition-all ${
                   isActive
                     ? 'bg-blue-500/90 text-white'
                     : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`}
               >
                 <Icon className="w-4 h-4" />
+                {option.label}
               </button>
             );
           })}
@@ -206,6 +213,7 @@ const MapView = ({ readings }) => {
 
         {mapMode === 'heatmap' && hasGoogleAQ && (
           <div className="flex gap-1 rounded-lg border border-slate-600 bg-slate-800/90 p-1 shadow-lg backdrop-blur-sm">
+            <span className="px-2 py-1 text-xs font-semibold text-slate-300">Google AQ Layer:</span>
             {HEATMAP_LAYER_TYPES.map((layerType) => (
               <button
                 key={layerType.value}
@@ -255,7 +263,7 @@ const MapView = ({ readings }) => {
           />
         )}
         
-        <MapController readings={readings} centerMapTrigger={centerMapTrigger} />
+        <MapController centerMapTrigger={centerMapTrigger} />
 
         {/* Kecamatan outlines without solid fill */}
         {districtGeoJson && (
@@ -267,67 +275,6 @@ const MapView = ({ readings }) => {
           />
         )}
 
-        {/* Individual Station Markers */}
-        {readings && readings.map((reading, idx) => {
-          const aqi = Number(reading.us_aqi) || 0;
-          const colorInfo = getAqiColor(aqi);
-          const hexColor = getAqiHexColor(aqi);
-
-          return (
-            <CircleMarker
-              key={reading.reading_id || reading.id || idx}
-              center={[reading.latitude, reading.longitude]}
-              radius={14}
-              pathOptions={{
-                color: '#1e293b',
-                weight: 2,
-                fillColor: hexColor,
-                fillOpacity: 0.9,
-              }}
-            >
-              <Popup className="aqi-popup">
-                <div className="p-1 min-w-[200px]">
-                  <h3 className="font-bold text-lg mb-1">{reading.location_name || 'Surabaya Area'}</h3>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2 py-1 rounded text-xs font-bold bg-opacity-20 ${colorInfo.bg} ${colorInfo.text}`}>
-                      AQI: {Math.round(aqi)}
-                    </span>
-                    <span className="text-xs text-slate-400">{colorInfo.label}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-3 border-t border-slate-600 pt-2">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">PM2.5</span>
-                      <span className="font-medium">{Number(reading.pm2_5 || 0).toFixed(1)} µg/m³</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">PM10</span>
-                      <span className="font-medium">{Number(reading.pm10 || 0).toFixed(1)} µg/m³</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">O3</span>
-                      <span className="font-medium">{Number(reading.ozone || 0).toFixed(1)} µg/m³</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">NO2</span>
-                      <span className="font-medium">{Number(reading.nitrogen_dioxide || 0).toFixed(1)} µg/m³</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">SO2</span>
-                      <span className="font-medium">{Number(reading.sulphur_dioxide || 0).toFixed(1)} µg/m³</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">CO</span>
-                      <span className="font-medium">{Number(reading.carbon_monoxide || 0).toFixed(1)} µg/m³</span>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-3 text-right">
-                    Measured on: {new Date(reading.measured_on).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
       </MapContainer>
       
       <div className="absolute inset-0 pointer-events-none rounded-2xl shadow-[inset_0_0_50px_rgba(15,23,42,0.8)] z-[400]"></div>

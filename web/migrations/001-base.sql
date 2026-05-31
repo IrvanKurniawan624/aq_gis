@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS air_quality_readings (
   id BIGINT NOT NULL AUTO_INCREMENT,
   city_id BIGINT NOT NULL,
   source_id BIGINT NOT NULL,
-  measured_on DATE NOT NULL,
+  measured_on DATETIME NOT NULL,
   frequency VARCHAR(80) NOT NULL DEFAULT 'daily',
   resolution VARCHAR(80) NOT NULL DEFAULT 'modeled_city',
   pm10 DOUBLE,

@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # PostGIS kept for reference — not used by the web app (which uses MySQL)
+  # PostGIS is kept for reference. The web application uses MySQL.
   postgres:
     image: postgis/postgis:16-3.4
     container_name: aq_gis_postgres

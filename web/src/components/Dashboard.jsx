@@ -3,28 +3,67 @@ import axios from 'axios';
 import MapView from './MapView';
 import StatCard from './StatCard';
 import HistoryChart from './HistoryChart';
-import { mockReadings, getAqiColor } from '../data/mockApiData';
-import { Wind, Activity, AlertTriangle, MapPin, Search, LineChart as LineChartIcon } from 'lucide-react';
+import { getAqiColor } from '../data/aqi';
+import { Wind, Activity, Clock3, Search, LineChart as LineChartIcon } from 'lucide-react';
+
+const DEFAULT_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const DEFAULT_SOURCE = {
+  name: 'open_meteo_current',
+  label: 'Open-Meteo',
+};
 
 const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [readings, setReadings] = useState(mockReadings);
+  const [readings, setReadings] = useState([]);
+  const [readingSources, setReadingSources] = useState([DEFAULT_SOURCE]);
+  const [selectedSource, setSelectedSource] = useState(DEFAULT_SOURCE.name);
+  const [refreshIntervalMs, setRefreshIntervalMs] = useState(DEFAULT_REFRESH_INTERVAL_MS);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState(null);
 
   useEffect(() => {
-    const fetchLatestData = async () => {
+    const loadConfig = async () => {
       try {
-        const response = await axios.get('http://localhost:3001/api/latest');
-        if (response.data && response.data.length > 0) {
-          setReadings(response.data);
+        const response = await axios.get('/api/config');
+        const intervalHours = Number(response.data?.fetchIntervalHours);
+        const sources = response.data?.cityReadingSources;
+
+        if (Number.isFinite(intervalHours) && intervalHours > 0) {
+          setRefreshIntervalMs(intervalHours * 60 * 60 * 1000);
+        }
+
+        if (Array.isArray(sources) && sources.length > 0) {
+          setReadingSources(sources);
         }
       } catch (error) {
-        console.warn("Could not connect to API, using mock data.", error.message);
+        console.warn('Could not load API configuration.', error.message);
       }
     };
-    fetchLatestData();
+
+    loadConfig();
   }, []);
+
+  useEffect(() => {
+    const fetchLatestData = async () => {
+      try {
+        const response = await axios.get('/api/latest', {
+          params: { source: selectedSource },
+        });
+        setReadings(response.data || []);
+      } catch (error) {
+        console.warn('Could not load current air-quality data.', error.message);
+        setReadings([]);
+      }
+    };
+
+    fetchLatestData();
+    const refreshTimer = setInterval(fetchLatestData, refreshIntervalMs);
+
+    return () => clearInterval(refreshTimer);
+  }, [refreshIntervalMs, selectedSource]);
+
+  const selectedSourceLabel = readingSources.find((source) => source.name === selectedSource)?.label
+    || DEFAULT_SOURCE.label;
 
   const filteredReadings = useMemo(() => {
     if (!searchQuery) return readings;
@@ -35,11 +74,20 @@ const Dashboard = () => {
 
   const stats = useMemo(() => {
     if (filteredReadings.length === 0) return null;
-    const avgAqi = Math.round(filteredReadings.reduce((sum, r) => sum + r.us_aqi, 0) / filteredReadings.length);
-    const maxReading = filteredReadings.reduce((max, r) => r.us_aqi > max.us_aqi ? r : max, filteredReadings[0]);
-    const avgPm25 = (filteredReadings.reduce((sum, r) => sum + r.pm2_5, 0) / filteredReadings.length).toFixed(1);
+    const aqiValues = filteredReadings
+      .map((reading) => reading.us_aqi === null ? Number.NaN : Number(reading.us_aqi))
+      .filter(Number.isFinite);
+    const pm25Values = filteredReadings
+      .map((reading) => reading.pm2_5 === null ? Number.NaN : Number(reading.pm2_5))
+      .filter(Number.isFinite);
+    const avgAqi = aqiValues.length > 0
+      ? Math.round(aqiValues.reduce((sum, value) => sum + value, 0) / aqiValues.length)
+      : null;
+    const avgPm25 = pm25Values.length > 0
+      ? (pm25Values.reduce((sum, value) => sum + value, 0) / pm25Values.length).toFixed(1)
+      : 'No data';
     
-    return { avgAqi, maxReading, avgPm25 };
+    return { avgAqi, avgPm25 };
   }, [filteredReadings]);
 
   const handleOpenHistory = () => {
@@ -68,6 +116,26 @@ const Dashboard = () => {
         </div>
 
         <div className="px-6 mb-6">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+            City Data Provider
+          </p>
+          <div className="mb-4 flex gap-2">
+            {readingSources.map((source) => (
+              <button
+                key={source.name}
+                type="button"
+                onClick={() => setSelectedSource(source.name)}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                  selectedSource === source.name
+                    ? 'border-blue-400 bg-blue-500/20 text-blue-200'
+                    : 'border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {source.label}
+              </button>
+            ))}
+          </div>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input 
@@ -95,8 +163,8 @@ const Dashboard = () => {
               </div>
               
               <StatCard 
-                title="Filtered Average AQI" 
-                value={stats.avgAqi} 
+                title={`${selectedSourceLabel} Current AQI`}
+                value={stats.avgAqi ?? 'No data'}
                 unit="US AQI"
                 icon={Activity}
                 colorClass={getAqiColor(stats.avgAqi)}
@@ -112,23 +180,13 @@ const Dashboard = () => {
                   colorClass={{text: 'text-blue-400', bg: 'bg-blue-500'}}
                 />
                 <StatCard 
-                  title="Active Sensors" 
-                  value={filteredReadings.length} 
-                  icon={MapPin}
+                  title="Update Interval"
+                  value={refreshIntervalMs / 60 / 60 / 1000}
+                  unit="hour"
+                  icon={Clock3}
                   colorClass={{text: 'text-emerald-400', bg: 'bg-emerald-500'}}
                 />
               </div>
-
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-6">Critical Areas</h2>
-              
-              <StatCard 
-                title="Highest Pollution Area" 
-                value={stats.maxReading.us_aqi} 
-                unit="US AQI"
-                icon={AlertTriangle}
-                colorClass={getAqiColor(stats.maxReading.us_aqi)}
-                subtitle={`${stats.maxReading.location_name} - ${getAqiColor(stats.maxReading.us_aqi).label}`}
-              />
 
               <div className="mt-8 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
                 <h4 className="text-blue-400 text-sm font-medium mb-1">Health Recommendation</h4>
@@ -147,7 +205,7 @@ const Dashboard = () => {
       </div>
 
       <div className="flex-1 h-full p-4 relative bg-slate-900/50">
-        <MapView readings={filteredReadings} />
+        <MapView />
       </div>
 
       {/* History Modal */}
@@ -155,6 +213,8 @@ const Dashboard = () => {
         <HistoryChart 
           cityId={selectedCityId} 
           locationName={filteredReadings.find(r => r.city_id === selectedCityId)?.location_name || 'Selected Area'}
+          source={selectedSource}
+          sourceLabel={selectedSourceLabel}
           onClose={() => setShowHistoryModal(false)} 
         />
       )}

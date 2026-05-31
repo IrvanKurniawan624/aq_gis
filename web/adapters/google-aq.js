@@ -1,9 +1,12 @@
+import { toJakartaHour } from './time.js'
+
 const GOOGLE_AQ_URL = 'https://airquality.googleapis.com/v1/currentConditions:lookup'
+const GOOGLE_AQ_REGION_CODE = 'ID'
+const GOOGLE_AQ_INDEX_CODE = 'usa_epa'
 const SURABAYA_LOCATION = {
   latitude: -7.24917,
   longitude: 112.75083,
 }
-const TIMEZONE = 'Asia/Jakarta'
 const EMPTY_READING = {
   pm10: null,
   pm2_5: null,
@@ -26,32 +29,28 @@ const POLLUTANT_CODE_MAP = {
   co: 'carbon_monoxide',
 }
 
-function getJakartaDate() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-
-  const dateParts = Object.fromEntries(
-    parts
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-
-  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`
-}
-
 function getPollutantValue(pollutant) {
   return pollutant?.concentration?.value ?? null
 }
 
-function getUsAqi(indexes = []) {
-  const usaEpaIndex = indexes.find((index) => index.code?.toLowerCase() === 'usa_epa')
-  const universalIndex = indexes.find((index) => index.code?.toLowerCase() === 'uaqi')
+export function getUsAqi(indexes = []) {
+  const usaEpaIndex = indexes.find(
+    (index) => index.code?.toLowerCase() === GOOGLE_AQ_INDEX_CODE,
+  )
 
-  return usaEpaIndex?.aqi ?? universalIndex?.aqi ?? null
+  return usaEpaIndex?.aqi ?? null
+}
+
+export function buildGoogleAqRequestBody(location) {
+  return {
+    location,
+    extraComputations: ['LOCAL_AQI', 'POLLUTANT_CONCENTRATION'],
+    customLocalAqis: [{
+      regionCode: GOOGLE_AQ_REGION_CODE,
+      aqi: GOOGLE_AQ_INDEX_CODE,
+    }],
+    universalAqi: false,
+  }
 }
 
 export default async function fetchGoogleAQ(location = SURABAYA_LOCATION) {
@@ -67,10 +66,7 @@ export default async function fetchGoogleAQ(location = SURABAYA_LOCATION) {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      location,
-      extraComputations: ['LOCAL_AQI', 'POLLUTANT_CONCENTRATION'],
-    }),
+    body: JSON.stringify(buildGoogleAqRequestBody(location)),
   })
 
   if (!response.ok) {
@@ -79,7 +75,7 @@ export default async function fetchGoogleAQ(location = SURABAYA_LOCATION) {
 
   const data = await response.json()
   const reading = {
-    measured_on: getJakartaDate(),
+    measured_on: toJakartaHour(data.dateTime),
     ...EMPTY_READING,
     us_aqi: getUsAqi(data.indexes),
   }

@@ -24,10 +24,13 @@ function getAqiHexColor(aqi) {
 
 function formatChartDate(
   dateValue,
-  options = { month: 'short', day: 'numeric', year: 'numeric' },
+  options = { month: 'short', day: 'numeric', hour: 'numeric' },
 ) {
-  const [year, month, day] = dateValue.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('en-US', options);
+  const [datePart, timePart = '00:00:00'] = dateValue.split(/[ T]/);
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute, second] = timePart.split(':').map(Number);
+
+  return new Date(year, month - 1, day, hour, minute, second).toLocaleDateString('en-US', options);
 }
 
 const DistrictTooltip = ({ active, label, payload }) => {
@@ -62,7 +65,7 @@ const DistrictTooltip = ({ active, label, payload }) => {
   );
 };
 
-const HistoryChart = ({ cityId, locationName, onClose }) => {
+const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) => {
   const [activeTab, setActiveTab] = useState('city');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -90,8 +93,9 @@ const HistoryChart = ({ cityId, locationName, onClose }) => {
     const fetchHistory = async () => {
       setLoading(true);
       try {
-        let url = `http://localhost:3001/api/history/${cityId}`;
+        let url = `/api/history/${cityId}`;
         const params = new URLSearchParams();
+        params.append('source', source);
         if (startDate) params.append('start_date', startDate);
         if (endDate) params.append('end_date', endDate);
 
@@ -113,7 +117,7 @@ const HistoryChart = ({ cityId, locationName, onClose }) => {
     };
 
     fetchHistory();
-  }, [activeTab, cityId, startDate, endDate]);
+  }, [activeTab, cityId, source, startDate, endDate]);
 
   useEffect(() => {
     if (activeTab !== 'district' || districtLoaded) return;
@@ -121,7 +125,7 @@ const HistoryChart = ({ cityId, locationName, onClose }) => {
     const fetchDistrictHistory = async () => {
       setDistrictLoading(true);
       try {
-        const response = await axios.get('http://localhost:3001/api/kecamatan/history?days=30');
+        const response = await axios.get('/api/kecamatan/history?days=30');
         setDistrictRows(response.data || []);
         setDistrictLoaded(true);
       } catch (error) {
@@ -158,7 +162,7 @@ const HistoryChart = ({ cityId, locationName, onClose }) => {
       if (!rowsByDate.has(row.measured_on)) {
         rowsByDate.set(row.measured_on, {
           measured_on: row.measured_on,
-          date: formatChartDate(row.measured_on, { month: 'short', day: 'numeric' }),
+          date: formatChartDate(row.measured_on, { month: 'short', day: 'numeric', hour: 'numeric' }),
         });
       }
 
@@ -176,7 +180,7 @@ const HistoryChart = ({ cityId, locationName, onClose }) => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-6 border-b border-slate-700/50 gap-4">
           <div>
             <h2 className="text-xl font-bold text-white">Historical Air Quality</h2>
-            <p className="text-sm text-slate-400">{locationName} - Daily Trends</p>
+            <p className="text-sm text-slate-400">{locationName} - {sourceLabel} Trends</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">

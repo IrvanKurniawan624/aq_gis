@@ -1,3 +1,5 @@
+import { toJakartaHour } from './time.js'
+
 const OPEN_METEO_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality'
 const SURABAYA_LATITUDE = '-7.24917'
 const SURABAYA_LONGITUDE = '112.75083'
@@ -15,23 +17,6 @@ const CURRENT_FIELDS = [
   'us_aqi',
   'european_aqi',
 ]
-
-function getJakartaDate() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-
-  const dateParts = Object.fromEntries(
-    parts
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  )
-
-  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`
-}
 
 function buildUrl() {
   const params = new URLSearchParams({
@@ -55,7 +40,7 @@ export default async function fetchOpenMeteo() {
   const current = data.current ?? {}
 
   return {
-    measured_on: getJakartaDate(),
+    measured_on: toJakartaHour(current.time),
     pm10: current.pm10 ?? null,
     pm2_5: current.pm2_5 ?? null,
     carbon_monoxide: current.carbon_monoxide ?? null,

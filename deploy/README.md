@@ -1,28 +1,39 @@
-# Cloud Deployment (Google Cloud Run)
+# Google Cloud Run Deployment
 
-## Architecture
+This guide deploys the Express backend and React production build to Google Cloud Run.
+Cloud SQL provides MySQL storage. Cloud Scheduler triggers the hourly ingestion endpoint.
 
+## Production Architecture
+
+```text
+Browser
+  Cloud Run service
+    Express API
+    React production build
+    Cloud SQL MySQL connection
+
+Cloud Scheduler
+  Hourly authenticated POST request
+    Cloud Run /api/admin/refresh
 ```
-Browser → Cloud Run (Express + React build)
-                ↓ DB
-          Cloud SQL MySQL 8.0
-                ↑
-      Cloud Scheduler (POST /api/admin/refresh every hour)
-```
 
-The `setInterval` scheduler inside `server.js` is disabled in production.
-Cloud Scheduler triggers the hourly data fetch instead — Cloud Run scales to
-zero between requests, which is cheaper and simpler.
+The internal Node.js interval scheduler is disabled when `NODE_ENV=production`. Cloud
+Scheduler is responsible for production refresh timing.
 
----
+## Prerequisites
 
-## One-time Setup
+- Google Cloud CLI installed
+- A Google Cloud project with billing enabled
+- A Google Air Quality API key
+- A local MySQL client
+- Node.js 20 or newer
 
-### 1. Prerequisites
+Set the project and enable the required services:
 
 ```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
+
 gcloud services enable \
   run.googleapis.com \
   sqladmin.googleapis.com \
@@ -31,7 +42,7 @@ gcloud services enable \
   cloudscheduler.googleapis.com
 ```
 
-### 2. Create Cloud SQL (MySQL 8.0)
+## Create Cloud SQL
 
 ```bash
 gcloud sql instances create aq-gis-mysql \
@@ -47,93 +58,129 @@ gcloud sql users create aq_gis \
   --password=CHOOSE_A_USER_PASSWORD
 ```
 
-### 3. Run migrations against Cloud SQL
+## Import Data and Run Migrations
+
+Temporarily allow your public IP while initializing the database:
 
 ```bash
-# Temporarily allow your IP (run once, delete after)
-gcloud sql instances patch aq-gis-mysql --authorized-networks=$(curl -s ifconfig.me)
+PUBLIC_IP=$(curl -s ifconfig.me)
+gcloud sql instances patch aq-gis-mysql --authorized-networks="$PUBLIC_IP"
 
-# Run from the web/ directory — set DB_HOST to the Cloud SQL public IP
-DB_HOST=$(gcloud sql instances describe aq-gis-mysql --format='value(ipAddresses[0].ipAddress)') \
+DB_HOST=$(gcloud sql instances describe aq-gis-mysql \
+  --format='value(ipAddresses[0].ipAddress)')
+
+mysql \
+  --host="$DB_HOST" \
+  --user=aq_gis \
+  --password \
+  db_aq_gis < database/import_air_quality_mysql.sql
+
+DB_HOST="$DB_HOST" \
 DB_USER=aq_gis \
 DB_PASSWORD=CHOOSE_A_USER_PASSWORD \
 DB_NAME=db_aq_gis \
-node migrations/run.js
+node web/migrations/run.js
 
-node scripts/seed-kecamatan.js
+DB_HOST="$DB_HOST" \
+DB_USER=aq_gis \
+DB_PASSWORD=CHOOSE_A_USER_PASSWORD \
+DB_NAME=db_aq_gis \
+node web/scripts/seed-kecamatan.js
 
-# Remove your IP from the allowlist
 gcloud sql instances patch aq-gis-mysql --clear-authorized-networks
 ```
 
-### 4. Store secrets in Secret Manager
+## Create Runtime Secrets
+
+Generate a refresh token and store all runtime secrets:
 
 ```bash
-echo -n "YOUR_GOOGLE_AQ_API_KEY" | \
+REFRESH_TOKEN=$(openssl rand -hex 32)
+
+printf '%s' 'YOUR_GOOGLE_AQ_API_KEY' | \
   gcloud secrets create GOOGLE_AQ_API_KEY --data-file=-
 
-echo -n "CHOOSE_A_USER_PASSWORD" | \
+printf '%s' 'CHOOSE_A_USER_PASSWORD' | \
   gcloud secrets create DB_PASSWORD --data-file=-
+
+printf '%s' "$REFRESH_TOKEN" | \
+  gcloud secrets create REFRESH_TOKEN --data-file=-
 ```
 
-### 5. Grant Cloud Run access to Cloud SQL and secrets
+Keep the `REFRESH_TOKEN` shell variable available until the Cloud Scheduler job is
+created.
+
+## Create the Runtime Service Account
 
 ```bash
 PROJECT_ID=$(gcloud config get-value project)
-SA="${PROJECT_ID}@appspot.gserviceaccount.com"
+RUN_SA="aq-gis-runner@${PROJECT_ID}.iam.gserviceaccount.com"
+BUILD_SA=$(gcloud builds get-default-service-account)
 
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:${SA}" \
-  --role="roles/cloudsql.client"
+gcloud iam service-accounts create aq-gis-runner \
+  --display-name='AQ GIS Cloud Run runtime'
 
-gcloud secrets add-iam-policy-binding GOOGLE_AQ_API_KEY \
-  --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${RUN_SA}" \
+  --role='roles/cloudsql.client'
 
-gcloud secrets add-iam-policy-binding DB_PASSWORD \
-  --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"
+for SECRET in GOOGLE_AQ_API_KEY DB_PASSWORD REFRESH_TOKEN; do
+  gcloud secrets add-iam-policy-binding "$SECRET" \
+    --member="serviceAccount:${RUN_SA}" \
+    --role='roles/secretmanager.secretAccessor'
+done
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${BUILD_SA}" \
+  --role='roles/run.admin'
+
+gcloud iam service-accounts add-iam-policy-binding "$RUN_SA" \
+  --member="serviceAccount:${BUILD_SA}" \
+  --role='roles/iam.serviceAccountUser'
 ```
 
-### 6. Deploy
+The Cloud Build default service account varies by project configuration. Query it with
+`gcloud builds get-default-service-account` instead of assuming a fixed email address.
+
+## Deploy
+
+Run this command from the repository root:
 
 ```bash
-# From the repo root
 gcloud builds submit --config=deploy/cloudbuild.yaml
 ```
 
-### 7. Set up Cloud Scheduler (hourly data fetch)
+## Create the Hourly Scheduler Job
 
 ```bash
 SERVICE_URL=$(gcloud run services describe aq-gis-web \
-  --region=asia-southeast2 --format='value(status.url)')
+  --region=asia-southeast2 \
+  --format='value(status.url)')
 
 gcloud scheduler jobs create http aq-gis-hourly-refresh \
-  --schedule="0 * * * *" \
+  --schedule='0 * * * *' \
   --uri="${SERVICE_URL}/api/admin/refresh" \
   --http-method=POST \
+  --headers="X-Refresh-Token=${REFRESH_TOKEN}" \
   --location=asia-southeast2 \
-  --time-zone="Asia/Jakarta"
+  --time-zone='Asia/Jakarta'
 ```
 
----
+## Verify the Deployment
 
-## Redeploying after code changes
+```bash
+curl "${SERVICE_URL}/api/config"
+
+curl \
+  --request POST \
+  --header "X-Refresh-Token: ${REFRESH_TOKEN}" \
+  "${SERVICE_URL}/api/admin/refresh"
+```
+
+## Redeploy
+
+After code changes:
 
 ```bash
 gcloud builds submit --config=deploy/cloudbuild.yaml
 ```
-
-Cloud Build builds the Docker image, pushes it, and updates the Cloud Run service automatically.
-
----
-
-## Costs (approximate, smallest tier)
-
-| Service | Cost |
-|---------|------|
-| Cloud SQL db-f1-micro | ~$7/month |
-| Cloud Run (pay per request) | < $1/month at hobby traffic |
-| Cloud Scheduler (1 job) | $0.10/month |
-| Secret Manager | ~$0.06/month |
-| **Total** | **~$8–9/month** |
-
-Free trial credits cover this easily for several months.

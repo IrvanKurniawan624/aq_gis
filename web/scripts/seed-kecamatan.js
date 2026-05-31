@@ -69,16 +69,19 @@ try {
 
     const centroid = getCentroid(feature.geometry);
 
-    const [result] = await pool.execute(
+    await pool.execute(
       `
-        INSERT IGNORE INTO kecamatan
+        INSERT INTO kecamatan
           (name, centroid_lat, centroid_lon)
         VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          centroid_lat = VALUES(centroid_lat),
+          centroid_lon = VALUES(centroid_lon)
       `,
       [name, centroid.centroid_lat, centroid.centroid_lon],
     );
 
-    console.log(`[seed-kecamatan] ${result.affectedRows === 1 ? 'inserted' : 'exists'} ${name}`);
+    console.log(`[seed-kecamatan] seeded ${name}`);
   }
 } finally {
   await pool.end();
