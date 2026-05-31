@@ -288,7 +288,11 @@ const Dashboard = () => {
       </div>
 
       <div className="flex-1 h-full p-4 relative bg-slate-900/50">
-        <MapView focusedLocation={selectedLocation} onResetLocation={handleResetLocation} />
+        <MapView
+          focusedLocation={selectedLocation}
+          onResetLocation={handleResetLocation}
+          onSelectLocation={selectLocation}
+        />
       </div>
 
       {/* History Modal */}

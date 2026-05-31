@@ -17,6 +17,7 @@ individual monitoring-station locations.
 - Selectable dark, street, satellite, and topographic map basemaps.
 - Google AQ heatmap tiles for AQI, US AQI, and PM2.5.
 - Google AQ district estimates for 31 Surabaya kecamatan centroid coordinates.
+- Searchable and clickable kecamatan boundaries with latest stored pollutant detail popups.
 - City and district historical charts.
 - MySQL persistence with hourly deduplication.
 - Thirty-day retention for detailed kecamatan rows.
