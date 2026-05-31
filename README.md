@@ -14,6 +14,7 @@ individual monitoring-station locations.
 
 - Hourly Surabaya city summaries from Open-Meteo and Google Air Quality.
 - Provider selector for comparing Open-Meteo and Google AQ city values.
+- Latest selected-provider Surabaya update time displayed in Jakarta local time.
 - Selectable dark, street, satellite, and topographic map basemaps.
 - Google AQ heatmap tiles for AQI, US AQI, and PM2.5.
 - Google AQ district estimates for 31 Surabaya kecamatan centroid coordinates.
