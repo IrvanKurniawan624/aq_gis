@@ -1,4 +1,22 @@
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: aq_gis_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: db_aq_gis
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostGIS kept for reference — not used by the web app (which uses MySQL)
   postgres:
     image: postgis/postgis:16-3.4
     container_name: aq_gis_postgres
@@ -20,4 +38,5 @@ services:
       retries: 5
 
 volumes:
+  mysql_data:
   postgres_data:

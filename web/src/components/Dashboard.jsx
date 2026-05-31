@@ -13,9 +13,6 @@ const Dashboard = () => {
   const [selectedCityId, setSelectedCityId] = useState(null);
 
   useEffect(() => {
-    // We are currently using mockReadings for the Dashboard to provide "many data" points across the city map.
-    // Uncomment this to use the real database if you add multiple sensors/cities to your DB!
-    /*
     const fetchLatestData = async () => {
       try {
         const response = await axios.get('http://localhost:3001/api/latest');
@@ -27,7 +24,6 @@ const Dashboard = () => {
       }
     };
     fetchLatestData();
-    */
   }, []);
 
   const filteredReadings = useMemo(() => {
