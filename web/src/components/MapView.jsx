@@ -338,12 +338,14 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
           key={selectedBasemap.id}
           attribution={selectedBasemap.attribution}
           url={selectedBasemap.url}
+          zIndex={0}
         />
 
         {hasGoogleAQ && mapMode === 'heatmap' && (
           <TileLayer
             url={`/api/tiles/${selectedLayerType}/{z}/{x}/{y}`}
             opacity={0.6}
+            zIndex={100}
           />
         )}
         
