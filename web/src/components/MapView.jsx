@@ -16,6 +16,32 @@ const HEATMAP_LAYER_TYPES = [
   { label: 'US AQI', value: 'US_AQI' },
   { label: 'PM2.5', value: 'PM25_INDIGO_PERSIAN' },
 ];
+const BASEMAP_OPTIONS = [
+  {
+    id: 'dark',
+    label: 'Dark',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  },
+  {
+    id: 'street',
+    label: 'Street',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  },
+  {
+    id: 'satellite',
+    label: 'Satellite',
+    attribution: 'Tiles &copy; Esri',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  },
+  {
+    id: 'topographic',
+    label: 'Topographic',
+    attribution: 'Tiles &copy; Esri',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+  },
+];
 const DEFAULT_REFRESH_INTERVAL_HOURS = 1;
 
 function getAqiHexColor(aqi) {
@@ -75,6 +101,7 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
   const [districtGeoJson, setDistrictGeoJson] = useState(null);
   const [hasGoogleAQ, setHasGoogleAQ] = useState(false);
   const [mapMode, setMapMode] = useState('clean');
+  const [selectedBasemapId, setSelectedBasemapId] = useState('dark');
   const [selectedLayerType, setSelectedLayerType] = useState('UAQI_INDIGO_PERSIAN');
   const [kecamatanReadings, setKecamatanReadings] = useState([]);
   const [refreshIntervalHours, setRefreshIntervalHours] = useState(DEFAULT_REFRESH_INTERVAL_HOURS);
@@ -95,9 +122,12 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
     ) || null;
   }, [districtGeoJson, focusedLocation]);
 
+  const selectedBasemap = BASEMAP_OPTIONS.find((option) => option.id === selectedBasemapId)
+    || BASEMAP_OPTIONS[0];
+
   const modeOptions = useMemo(() => {
     const options = [
-      { mode: 'clean', icon: MapPin, label: 'Base Map' },
+      { mode: 'clean', icon: MapPin, label: 'No AQ Overlay' },
       { mode: 'choropleth', icon: BarChart2, label: 'Google AQ Districts' },
     ];
 
@@ -225,7 +255,23 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
   return (
     <div className="w-full h-full rounded-2xl overflow-hidden border border-slate-700/50 shadow-2xl relative z-0">
       <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-slate-600 bg-slate-800/90 shadow-lg backdrop-blur-sm">
+        <label className="flex w-fit items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/90 px-2.5 py-2 text-xs font-semibold text-slate-300 shadow-lg backdrop-blur-sm">
+          Basemap:
+          <select
+            value={selectedBasemapId}
+            onChange={(event) => setSelectedBasemapId(event.target.value)}
+            className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+          >
+            {BASEMAP_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex w-fit flex-wrap overflow-hidden rounded-lg border border-slate-600 bg-slate-800/90 shadow-lg backdrop-blur-sm">
+          <span className="px-2.5 py-2 text-xs font-semibold text-slate-300">AQ Overlay:</span>
           {modeOptions.map((option) => {
             const Icon = option.icon;
             const isActive = mapMode === option.mode;
@@ -289,8 +335,9 @@ const MapView = ({ focusedLocation, onResetLocation }) => {
         zoomControl={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          key={selectedBasemap.id}
+          attribution={selectedBasemap.attribution}
+          url={selectedBasemap.url}
         />
 
         {hasGoogleAQ && mapMode === 'heatmap' && (

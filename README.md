@@ -14,6 +14,7 @@ individual monitoring-station locations.
 
 - Hourly Surabaya city summaries from Open-Meteo and Google Air Quality.
 - Provider selector for comparing Open-Meteo and Google AQ city values.
+- Selectable dark, street, satellite, and topographic map basemaps.
 - Google AQ heatmap tiles for AQI, US AQI, and PM2.5.
 - Google AQ district estimates for 31 Surabaya kecamatan centroid coordinates.
 - City and district historical charts.
@@ -106,6 +107,8 @@ node scripts/seed-kecamatan.js
 
 Edit `web/.env` and set `GOOGLE_AQ_API_KEY` to enable Google city summaries, Google
 district estimates, and Google heatmap tiles. Open-Meteo does not require an API key.
+The CARTO, OpenStreetMap, and Esri basemap views do not require an additional application
+API key.
 
 ### Run the Application
 
@@ -171,3 +174,6 @@ See [deploy/README.md](deploy/README.md) for the Google Cloud Run deployment pro
 - Google Air Quality API: https://developers.google.com/maps/documentation/air-quality
 - Google AQ current conditions: https://developers.google.com/maps/documentation/air-quality/current-conditions
 - Google AQ heatmap tiles: https://developers.google.com/maps/documentation/air-quality/heatmaps
+- OpenStreetMap tile usage policy: https://operations.osmfoundation.org/policies/tiles/
+- Esri World Imagery basemap: https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9
+- Esri World Topographic Map: https://www.arcgis.com/home/item.html?id=6e850093c837475e8c23d905ac43b7d0
