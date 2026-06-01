@@ -4,7 +4,7 @@ import { Activity, Clock3, LineChart as LineChartIcon, Map, Search, Wind } from 
 import MapView from './MapView';
 import StatCard from './StatCard';
 import HistoryChart from './HistoryChart';
-import { getAqiColor } from '../data/aqi';
+import { getAqiColor, getAqiGuidance } from '../data/aqi';
 
 const DEFAULT_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_SOURCE = {
@@ -32,7 +32,7 @@ const Dashboard = () => {
   const [refreshIntervalMs, setRefreshIntervalMs] = useState(DEFAULT_REFRESH_INTERVAL_MS);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState(null);
-  const [kecamatanNames, setKecamatanNames] = useState([]);
+  const [kecamatanReadings, setKecamatanReadings] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mobileTab, setMobileTab] = useState('overview');
 
@@ -78,21 +78,24 @@ const Dashboard = () => {
   }, [refreshIntervalMs, selectedSource]);
 
   useEffect(() => {
-    const fetchKecamatanNames = async () => {
+    const fetchKecamatanReadings = async () => {
       try {
         const response = await axios.get('/api/kecamatan/latest');
-        const names = (response.data || [])
-          .map((reading) => reading.name)
-          .filter(Boolean)
-          .sort((left, right) => left.localeCompare(right));
-        setKecamatanNames(names);
+        setKecamatanReadings(response.data || []);
       } catch (error) {
-        console.warn('Could not load kecamatan names.', error.message);
+        console.warn('Could not load kecamatan readings.', error.message);
       }
     };
 
-    fetchKecamatanNames();
+    fetchKecamatanReadings();
   }, []);
+
+  const kecamatanNames = useMemo(() => {
+    return kecamatanReadings
+      .map((reading) => reading.name)
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right));
+  }, [kecamatanReadings]);
 
   const selectedSourceLabel = readingSources.find((source) => source.name === selectedSource)?.label
     || DEFAULT_SOURCE.label;
@@ -111,6 +114,25 @@ const Dashboard = () => {
       .filter((name) => name.toLowerCase().includes(normalizedQuery))
       .slice(0, 6);
   }, [kecamatanNames, searchQuery, selectedLocation]);
+
+  const leaderboard = useMemo(() => {
+    const validReadings = kecamatanReadings
+      .filter((r) => r.us_aqi !== null && r.us_aqi !== undefined)
+      .map((r) => ({
+        name: r.name,
+        aqi: Number(r.us_aqi),
+      }));
+
+    if (validReadings.length === 0) return null;
+
+    const sortedCleanest = [...validReadings].sort((a, b) => a.aqi - b.aqi);
+    const sortedPolluted = [...validReadings].sort((a, b) => b.aqi - a.aqi);
+
+    return {
+      cleanest: sortedCleanest.slice(0, 3),
+      polluted: sortedPolluted.slice(0, 3),
+    };
+  }, [kecamatanReadings]);
   const stats = useMemo(() => {
     if (readings.length === 0) return null;
 
@@ -306,7 +328,7 @@ const Dashboard = () => {
                   {[
                     { label: 'PM2.5', value: stats.avgPm25, unit: 'ug/m3' },
                     { label: 'PM10', value: stats.avgPm10, unit: 'ug/m3' },
-                    { label: 'NO2', value: stats.avgNo2, unit: 'ug/m3' },
+                    { label: 'NO2', value: stats.avgNo2, unit: selectedSource === 'google_aq_current' ? 'ppb' : 'ug/m3' },
                   ].map((pollutant) => (
                     <div key={pollutant.label} className="resident-pollutant">
                       <span className="resident-pollutant-name">{pollutant.label}</span>
@@ -317,11 +339,129 @@ const Dashboard = () => {
                 </section>
               </div>
 
+              {/* WHO Guidelines Comparison */}
+              <div className="rounded-[10px] border border-[var(--resident-border)] bg-[var(--resident-surface)] p-4 shadow-sm">
+                <div className="mb-3">
+                  <span className="resident-eyebrow mb-1 block">WHO Guidelines</span>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--resident-fg)]">Safety Exposure Limits</h3>
+                </div>
+                <div className="space-y-3.5">
+                  {[
+                    {
+                      label: 'PM2.5',
+                      val: Number(stats.avgPm25),
+                      limit: 5,
+                      unit: 'ug/m3',
+                    },
+                    {
+                      label: 'PM10',
+                      val: Number(stats.avgPm10),
+                      limit: 15,
+                      unit: 'ug/m3',
+                    },
+                    {
+                      label: 'NO2',
+                      val: Number(stats.avgNo2),
+                      limit: selectedSource === 'google_aq_current' ? 5.3 : 10,
+                      unit: selectedSource === 'google_aq_current' ? 'ppb' : 'ug/m3',
+                    },
+                  ].map((item) => {
+                    const ratio = Number.isFinite(item.val) && item.limit > 0 ? (item.val / item.limit) : 0;
+                    const percent = Math.round(ratio * 100);
+                    const ratioText = ratio > 1 ? `${ratio.toFixed(1)}x over limit` : 'Within safe range';
+                    const colorStyle = ratio > 1 ? 'bg-red-500' : 'bg-emerald-500';
+                    const textClass = ratio > 1 ? 'text-red-600 font-bold' : 'text-emerald-600 font-semibold';
+
+                    return (
+                      <div key={item.label} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-[var(--resident-fg)]">{item.label}</span>
+                          <span className="text-[10px] text-[var(--resident-muted)]">
+                            {Number.isFinite(item.val) ? `${item.val} ${item.unit}` : 'No data'} / Limit: {item.limit} {item.unit}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-[var(--resident-surface-2)] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${colorStyle}`}
+                            style={{ width: `${Math.max(Math.min(ratio * 100 / 4, 100), 5)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className={textClass}>{ratioText}</span>
+                          {ratio > 1 && <span className="text-[var(--resident-muted)]">({percent}% of limit)</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* District Leaderboard */}
+              {leaderboard && (
+                <div className="rounded-[10px] border border-[var(--resident-border)] bg-[var(--resident-surface)] p-4 shadow-sm">
+                  <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--resident-fg)]">District AQI Extremes</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Cleanest Districts */}
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Cleanest Areas
+                      </h4>
+                      <div className="divide-y divide-[var(--resident-border)]">
+                        {leaderboard.cleanest.map((item, idx) => (
+                          <button
+                            key={item.name}
+                            type="button"
+                            onClick={() => selectLocation(item.name)}
+                            className="flex w-full items-center justify-between py-1.5 text-left transition-colors hover:text-[var(--resident-accent-dark)]"
+                          >
+                            <span className="truncate text-xs font-medium text-[var(--resident-fg)]">
+                              {idx + 1}. {item.name}
+                            </span>
+                            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                              {item.aqi}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Most Polluted Districts */}
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-red-600 flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                        Most Polluted
+                      </h4>
+                      <div className="divide-y divide-[var(--resident-border)]">
+                        {leaderboard.polluted.map((item, idx) => (
+                          <button
+                            key={item.name}
+                            type="button"
+                            onClick={() => selectLocation(item.name)}
+                            className="flex w-full items-center justify-between py-1.5 text-left transition-colors hover:text-[var(--resident-accent-dark)]"
+                          >
+                            <span className="truncate text-xs font-medium text-[var(--resident-fg)]">
+                              {idx + 1}. {item.name}
+                            </span>
+                            <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                              {item.aqi}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <section className="resident-guidance">
                 <h3>Health guidance</h3>
+                <p className="font-semibold text-[var(--resident-fg)] mb-1">
+                  {getAqiGuidance(stats.avgAqi).description}
+                </p>
                 <p>
-                  Based on the current average AQI, sensitive groups should reduce prolonged or heavy exertion.
-                  It is OK to be active outside, but take more breaks and do less intense activities.
+                  {getAqiGuidance(stats.avgAqi).guidance}
                 </p>
               </section>
             </>

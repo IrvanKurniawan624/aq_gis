@@ -10,7 +10,7 @@ import fetchGoogleAQ from './adapters/google-aq.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-dotenv.config();
+dotenv.config({ path: join(__dirname, '.env') });
 
 const app = express();
 const port = process.env.PORT || 3001;

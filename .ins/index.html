@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Surabaya Air Quality</title>
+  <style>
+    /*
+      Assumptions:
+      - Residents primarily need a fast map scan, then details for one area.
+      - Values visible in the provided screenshot are treated as sample data.
+      - The map illustration is an honest placeholder for the production map.
+      - Mobile is map-first with a bottom sheet; desktop uses an insight rail.
+    */
+    :root {
+      --bg: oklch(98.4% 0.012 92);
+      --surface: oklch(100% 0 0);
+      --surface-2: oklch(96.4% 0.026 92);
+      --surface-3: oklch(91.5% 0.075 90);
+      --fg: oklch(27% 0.04 55);
+      --muted: oklch(51% 0.035 62);
+      --muted-2: oklch(68% 0.028 72);
+      --border: oklch(89% 0.026 86);
+      --border-strong: oklch(80% 0.045 80);
+      --accent: oklch(84% 0.145 88);
+      --accent-dark: oklch(45% 0.105 52);
+      --accent-soft: oklch(95% 0.06 92);
+      --secondary: oklch(61% 0.105 49);
+      --good: oklch(67% 0.16 155);
+      --moderate: oklch(79% 0.16 87);
+      --warning: oklch(68% 0.16 57);
+      --danger: oklch(58% 0.2 28);
+      --shadow: 0 18px 46px rgba(102, 75, 39, 0.13);
+      --font-display: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      --font-body: "Segoe UI", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --rail: 392px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid color-mix(in oklch, var(--accent) 36%, transparent);
+      outline-offset: 2px;
+    }
+    .app {
+      min-height: 100%;
+      display: grid;
+      grid-template-columns: var(--rail) minmax(0, 1fr);
+      background: var(--surface);
+    }
+    .rail {
+      position: relative;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      border-right: 1px solid var(--border);
+      background: color-mix(in oklch, var(--surface) 94%, var(--bg));
+    }
+    .brand-row, .rail-main, .rail-footer { padding-inline: 24px; }
+    .brand-row {
+      height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      text-decoration: none;
+      color: var(--fg);
+    }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      color: var(--accent-dark);
+      border-radius: 13px;
+      background: var(--accent);
+      box-shadow: 0 8px 18px rgba(111, 78, 29, 0.16);
+    }
+    .brand-mark svg { width: 23px; height: 23px; }
+    .brand-title {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+    }
+    .brand-subtitle {
+      display: block;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .icon-button {
+      width: 44px;
+      height: 44px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--muted);
+      transition: 160ms ease;
+    }
+    .icon-button:hover { color: var(--fg); border-color: var(--border-strong); }
+    .icon-button svg { width: 18px; height: 18px; }
+    .rail-main {
+      flex: 1;
+      overflow: auto;
+      padding-top: 22px;
+      padding-bottom: 22px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong) transparent;
+    }
+    .eyebrow {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .summary-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 8px 0 16px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      font-family: var(--font-display);
+      font-size: 28px;
+      line-height: 1.08;
+      letter-spacing: -0.045em;
+    }
+    .timestamp {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .timestamp svg { width: 14px; height: 14px; color: var(--secondary); }
+    .sample-tag {
+      padding: 5px 7px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .aqi-panel {
+      padding: 18px 0 20px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .aqi-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .aqi-value {
+      font-family: var(--font-display);
+      font-size: 78px;
+      font-weight: 760;
+      line-height: 0.9;
+      letter-spacing: -0.085em;
+    }
+    .aqi-unit {
+      margin-left: 8px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid color-mix(in oklch, var(--moderate) 58%, var(--border));
+      border-radius: 999px;
+      background: color-mix(in oklch, var(--moderate) 14%, var(--surface));
+      color: color-mix(in oklch, var(--fg) 82%, var(--moderate));
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--moderate); }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 22px 0 11px;
+    }
+    .section-head h2 {
+      font-family: var(--font-display);
+      font-size: 15px;
+      letter-spacing: -0.02em;
+    }
+    .text-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 0 4px;
+      border: 0;
+      background: transparent;
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .text-button svg { width: 15px; height: 15px; }
+    .pollutants {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .pollutant { padding: 15px 11px 14px; border-right: 1px solid var(--border); }
+    .pollutant:first-child { padding-left: 0; }
+    .pollutant:last-child { border-right: 0; }
+    .pollutant-name {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .pollutant-value {
+      font-family: var(--font-display);
+      font-size: 23px;
+      font-weight: 750;
+      letter-spacing: -0.05em;
+    }
+    .pollutant-unit { margin-left: 3px; color: var(--muted); font-size: 11px; }
+    .guidance {
+      margin-top: 22px;
+      padding: 14px 15px 15px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+    }
+    .guidance h3 {
+      margin-bottom: 5px;
+      font-family: var(--font-display);
+      font-size: 14px;
+      letter-spacing: -0.01em;
+    }
+    .guidance p { color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .rail-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-block: 14px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .provider {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.03em;
+    }
+    .provider::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+
+    .workspace { position: relative; min-width: 0; min-height: 100vh; overflow: hidden; background: #f5f0e5; }
+    .map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .map-tint {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(255,251,242,0.28), transparent 26%, rgba(241,231,207,0.12));
+    }
+    .map-ui {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .map-ui > * { pointer-events: auto; }
+    .topbar {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .search-wrap { width: min(460px, calc(100vw - var(--rail) - 160px)); }
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 52px;
+      padding: 0 8px 0 16px;
+      border: 1px solid color-mix(in oklch, var(--border) 76%, transparent);
+      border-radius: 15px;
+      background: rgba(255,253,248,0.94);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+    .search svg { flex: 0 0 auto; width: 18px; height: 18px; color: var(--muted); }
+    .search input {
+      min-width: 0;
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--fg);
+      font-size: 14px;
+    }
+    .search input::placeholder { color: var(--muted-2); }
+    .search button {
+      height: 38px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent-dark);
+      color: oklch(99% 0.01 92);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .search-note {
+      width: max-content;
+      max-width: 100%;
+      margin: 8px 0 0 2px;
+      padding: 6px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,253,248,0.86);
+      color: var(--muted);
+      font-size: 11px;
+      backdrop-filter: blur(10px);
+    }
+    .map-actions { display: flex; gap: 8px; }
+    .map-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 13px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,253,248,0.92);
+      color: var(--fg);
+      box-shadow: 0 8px 25px rgba(102, 75, 39, 0.09);
+      font-size: 12px;
+      font-weight: 750;
+      backdrop-filter: blur(14px);
+    }
+    .map-button:hover { border-color: var(--border-strong); }
+    .map-button svg { width: 16px; height: 16px; color: var(--accent-dark); }
+    .layer-switch {
+      position: absolute;
+      top: 92px;
+      left: 20px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: rgba(255,253,248,0.92);
+      box-shadow: 0 8px 24px rgba(102, 75, 39, 0.09);
+      backdrop-filter: blur(14px);
+    }
+    .layer-switch button {
+      min-height: 34px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      transition: 150ms ease;
+    }
+    .layer-switch button.active { background: var(--accent-soft); color: var(--accent-dark); }
+    .legend {
+      position: absolute;
+      right: 20px;
+      bottom: 20px;
+      width: 240px;
+      padding: 12px 13px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: rgba(255,253,248,0.92);
+      box-shadow: 0 8px 24px rgba(102, 75, 39, 0.09);
+      backdrop-filter: blur(14px);
+    }
+    .legend-head { display: flex; justify-content: space-between; color: var(--muted); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+    .legend-scale {
+      height: 7px;
+      margin: 10px 0 7px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--good), var(--moderate), var(--warning), var(--danger));
+    }
+    .legend-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+    .area-card {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      width: 240px;
+      padding: 14px;
+      transform: translateY(-50%);
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: rgba(255,253,248,0.95);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+    .area-card h3 { margin-top: 5px; font-family: var(--font-display); font-size: 18px; letter-spacing: -0.03em; }
+    .area-card p { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .area-card strong { display: block; margin-top: 14px; font-family: var(--font-display); font-size: 32px; letter-spacing: -0.06em; }
+    .area-card strong small { color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; }
+    .map-credit { position: absolute; left: 20px; bottom: 20px; color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase; }
+    .mobile-sheet, .mobile-topbar { display: none; }
+
+    dialog {
+      width: min(620px, calc(100vw - 32px));
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      color: var(--fg);
+      box-shadow: 0 28px 80px rgba(15, 37, 46, 0.22);
+    }
+    dialog::backdrop { background: rgba(17, 34, 40, 0.3); backdrop-filter: blur(4px); }
+    .dialog-head, .dialog-body { padding: 18px 20px; }
+    .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
+    .dialog-head h2 { font-family: var(--font-display); font-size: 18px; letter-spacing: -0.03em; }
+    .placeholder-chart {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      align-items: end;
+      gap: 10px;
+      height: 154px;
+      margin: 16px 0 12px;
+      padding: 15px 14px 0;
+      border: 1px dashed var(--border-strong);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+    .placeholder-chart i { display: block; min-height: 18px; border-radius: 5px 5px 0 0; background: color-mix(in oklch, var(--accent) 38%, var(--surface)); }
+    .placeholder-chart i:nth-child(1) { height: 40%; } .placeholder-chart i:nth-child(2) { height: 58%; }
+    .placeholder-chart i:nth-child(3) { height: 48%; } .placeholder-chart i:nth-child(4) { height: 69%; }
+    .placeholder-chart i:nth-child(5) { height: 62%; } .placeholder-chart i:nth-child(6) { height: 72%; }
+    .placeholder-chart i:nth-child(7) { height: 55%; }
+    .placeholder-copy { color: var(--muted); font-size: 12px; line-height: 1.65; }
+
+    @media (max-width: 1120px) {
+      :root { --rail: 340px; }
+      .brand-row, .rail-main, .rail-footer { padding-inline: 19px; }
+      .area-card { display: none; }
+      .legend { width: 210px; }
+    }
+    @media (max-width: 760px) {
+      body { overflow: hidden; font-size: 16px; }
+      .app { display: block; }
+      .rail { display: none; }
+      .workspace { min-height: 100dvh; }
+      .topbar, .layer-switch, .area-card { display: none; }
+      .map { height: 100%; object-position: 72% center; }
+      .mobile-topbar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 13px 14px;
+        background: linear-gradient(180deg, rgba(255,252,245,0.96), rgba(255,252,245,0.74), transparent);
+      }
+      .mobile-topbar .brand-mark { width: 38px; height: 38px; border-radius: 12px; }
+      .mobile-actions { display: flex; gap: 7px; }
+      .mobile-actions .icon-button { background: rgba(255,253,248,0.92); }
+      .mobile-sheet {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        z-index: 6;
+        display: block;
+        max-height: min(73dvh, 610px);
+        overflow: auto;
+        padding: 8px 16px 17px;
+        border: 1px solid var(--border);
+        border-radius: 21px;
+        background: rgba(255,253,248,0.97);
+        box-shadow: 0 22px 50px rgba(102, 75, 39, 0.2);
+        backdrop-filter: blur(20px);
+        transition: transform 220ms ease;
+      }
+      .mobile-sheet.peek { transform: translateY(calc(100% - 188px)); }
+      .sheet-handle {
+        width: 42px;
+        height: 4px;
+        margin: 2px auto 13px;
+        border: 0;
+        border-radius: 99px;
+        background: var(--border-strong);
+      }
+      .sheet-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .mobile-sheet h1 { font-size: 24px; }
+      .mobile-sheet .aqi-panel { padding-top: 14px; }
+      .mobile-sheet .aqi-value { font-size: 65px; }
+      .mobile-sheet .section-head { margin-top: 18px; }
+      .legend { right: 13px; bottom: 200px; width: 182px; padding: 10px; }
+      .map-credit { left: 13px; bottom: 191px; max-width: 150px; }
+      .fab-search {
+        position: absolute;
+        left: 14px;
+        top: 74px;
+        z-index: 5;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(255,253,248,0.94);
+        color: var(--fg);
+        box-shadow: 0 8px 22px rgba(102, 75, 39, 0.12);
+        font-size: 13px;
+        font-weight: 750;
+      }
+      .fab-search svg { width: 16px; height: 16px; color: var(--accent-dark); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="rail" aria-label="Air quality summary">
+      <header class="brand-row">
+        <a class="brand" href="#" aria-label="Surabaya Air Quality home">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M4 8h8.5a2.5 2.5 0 1 0-2.3-3.5"/><path d="M4 12h13a2.5 2.5 0 1 1-2.3 3.5"/><path d="M4 16h5"/>
+            </svg>
+          </span>
+          <span>
+            <span class="brand-title">Surabaya Air Quality</span>
+            <span class="brand-subtitle">Resident air monitor</span>
+          </span>
+        </a>
+        <button class="icon-button" type="button" aria-label="Information" onclick="openInfo()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg>
+        </button>
+      </header>
+
+      <div class="rail-main">
+        <div class="eyebrow">Selected area</div>
+        <div class="summary-head">
+          <div>
+            <h1 data-area>Mulyorejo</h1>
+            <div class="timestamp">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              Example reading from supplied UI
+            </div>
+          </div>
+          <span class="sample-tag">Sample data</span>
+        </div>
+
+        <section class="aqi-panel" aria-labelledby="aqi-heading">
+          <div class="eyebrow" id="aqi-heading">Google AQ current AQI</div>
+          <div class="aqi-row">
+            <div><span class="aqi-value" data-aqi>79</span><span class="aqi-unit">US AQI</span></div>
+            <span class="status"><span class="dot"></span><span data-status>Moderate</span></span>
+          </div>
+        </section>
+
+        <div class="section-head">
+          <h2>Pollutant detail</h2>
+          <button class="text-button" type="button" onclick="openHistory()">
+            History
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 17 10 12l3 3 6-7"/><path d="M14 8h5v5"/></svg>
+          </button>
+        </div>
+        <section class="pollutants" aria-label="Pollutant summary">
+          <div class="pollutant"><span class="pollutant-name">PM2.5</span><span class="pollutant-value" data-pm>16.3</span><span class="pollutant-unit">ug/m3</span></div>
+          <div class="pollutant"><span class="pollutant-name">PM10</span><span class="pollutant-value">--</span><span class="pollutant-unit">ug/m3</span></div>
+          <div class="pollutant"><span class="pollutant-name">NO2</span><span class="pollutant-value">--</span><span class="pollutant-unit">ug/m3</span></div>
+        </section>
+
+        <section class="guidance">
+          <h3>Health guidance</h3>
+          <p data-guidance>Sensitive groups should reduce prolonged or heavy exertion. It is OK to be active outside, but take more breaks and do less intense activities.</p>
+        </section>
+      </div>
+
+      <footer class="rail-footer">
+        <span class="provider">Google AQ sample</span>
+        <span>Refresh: 1 hour</span>
+      </footer>
+    </aside>
+
+    <section class="workspace" aria-label="Air quality map">
+      <img class="map" src="assets/map-placeholder.svg" alt="Map placeholder for Surabaya district air quality data" />
+      <div class="map-tint"></div>
+      <div class="map-ui">
+        <div class="topbar">
+          <form class="search-wrap" onsubmit="searchArea(event)">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+              <input id="district-search" list="districts" value="Mulyorejo" aria-label="Find a district" />
+              <datalist id="districts"><option>Mulyorejo</option><option>Wonokromo</option><option>Kenjeran</option><option>Rungkut</option></datalist>
+              <button type="submit">Find area</button>
+            </div>
+            <div class="search-note" id="search-note">Focused on Mulyorejo</div>
+          </form>
+          <div class="map-actions">
+            <button class="map-button" type="button" onclick="resetPosition()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s6-4.4 6-11a6 6 0 1 0-12 0c0 6.6 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg>
+              Reset view
+            </button>
+          </div>
+        </div>
+
+        <div class="layer-switch" aria-label="Map layer">
+          <button type="button" data-layer="base" onclick="setLayer(this)">Base map</button>
+          <button type="button" data-layer="heat" onclick="setLayer(this)">AQ heatmap</button>
+          <button class="active" type="button" data-layer="district" onclick="setLayer(this)">Districts</button>
+        </div>
+
+        <aside class="area-card">
+          <span class="eyebrow">Focused district</span>
+          <h3 data-area>Mulyorejo</h3>
+          <p>Replace placeholder geometry with the production Leaflet district layer.</p>
+          <strong><span data-aqi>79</span> <small>US AQI</small></strong>
+        </aside>
+
+        <aside class="legend" aria-label="Air quality legend">
+          <div class="legend-head"><span>US AQI</span><span>District layer</span></div>
+          <div class="legend-scale"></div>
+          <div class="legend-labels"><span>Good</span><span>Moderate</span><span>Unhealthy</span></div>
+        </aside>
+        <div class="map-credit">Placeholder map - connect production GIS layer</div>
+      </div>
+
+      <div class="mobile-topbar">
+        <a class="brand" href="#" aria-label="Surabaya Air Quality home">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M4 8h8.5a2.5 2.5 0 1 0-2.3-3.5"/><path d="M4 12h13a2.5 2.5 0 1 1-2.3 3.5"/><path d="M4 16h5"/>
+            </svg>
+          </span>
+          <span><span class="brand-title">Surabaya AQ</span><span class="brand-subtitle">Resident monitor</span></span>
+        </a>
+        <div class="mobile-actions">
+          <button class="icon-button" type="button" aria-label="Reset map" onclick="resetPosition()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s6-4.4 6-11a6 6 0 1 0-12 0c0 6.6 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="fab-search" type="button" onclick="mobileSearch()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+        Find district
+      </button>
+
+      <section class="mobile-sheet peek" id="mobile-sheet" aria-label="Mobile air quality details">
+        <button class="sheet-handle" type="button" aria-label="Expand or collapse air quality details" onclick="toggleSheet()"></button>
+        <div class="sheet-top">
+          <div><span class="eyebrow">Selected area</span><h1 data-area>Mulyorejo</h1></div>
+          <span class="sample-tag">Sample</span>
+        </div>
+        <section class="aqi-panel">
+          <div class="aqi-row">
+            <div><span class="aqi-value" data-aqi>79</span><span class="aqi-unit">US AQI</span></div>
+            <span class="status"><span class="dot"></span><span data-status>Moderate</span></span>
+          </div>
+        </section>
+        <div class="section-head"><h2>Pollutant detail</h2><button class="text-button" type="button" onclick="openHistory()">History</button></div>
+        <section class="pollutants" aria-label="Pollutant summary">
+          <div class="pollutant"><span class="pollutant-name">PM2.5</span><span class="pollutant-value" data-pm>16.3</span><span class="pollutant-unit">ug/m3</span></div>
+          <div class="pollutant"><span class="pollutant-name">PM10</span><span class="pollutant-value">--</span><span class="pollutant-unit">ug/m3</span></div>
+          <div class="pollutant"><span class="pollutant-name">NO2</span><span class="pollutant-value">--</span><span class="pollutant-unit">ug/m3</span></div>
+        </section>
+        <section class="guidance"><h3>Health guidance</h3><p data-guidance>Sensitive groups should reduce prolonged or heavy exertion. It is OK to be active outside, but take more breaks and do less intense activities.</p></section>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="history-dialog">
+    <header class="dialog-head">
+      <div><span class="eyebrow">History placeholder</span><h2><span data-area>Mulyorejo</span> AQI trend</h2></div>
+      <button class="icon-button" type="button" aria-label="Close history" onclick="closeDialog('history-dialog')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m7 7 10 10M17 7 7 17"/></svg>
+      </button>
+    </header>
+    <div class="dialog-body">
+      <div class="placeholder-chart" aria-label="Placeholder chart for future history data"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="placeholder-copy">Chart structure placeholder. Bind this panel to hourly AQI observations before production; the bars are layout scaffolding, not reported measurements.</p>
+    </div>
+  </dialog>
+
+  <dialog id="info-dialog">
+    <header class="dialog-head">
+      <div><span class="eyebrow">Prototype note</span><h2>Data integration status</h2></div>
+      <button class="icon-button" type="button" aria-label="Close information" onclick="closeDialog('info-dialog')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m7 7 10 10M17 7 7 17"/></svg>
+      </button>
+    </header>
+    <div class="dialog-body">
+      <p class="placeholder-copy">This frontend prototype keeps the supplied Mulyorejo example reading and clearly labels the replaceable map, chart, and missing pollutant values. See <strong>design-system.md</strong> for tokens, component contracts, and integration notes.</p>
+    </div>
+  </dialog>
+
+  <script>
+    const sampleAreas = {
+      Mulyorejo: { aqi: "79", pm: "16.3", status: "Moderate", guidance: "Sensitive groups should reduce prolonged or heavy exertion. It is OK to be active outside, but take more breaks and do less intense activities." },
+      Wonokromo: { aqi: "--", pm: "--", status: "Awaiting data", guidance: "Connect the production district feed to show a resident-facing health recommendation." },
+      Kenjeran: { aqi: "--", pm: "--", status: "Awaiting data", guidance: "Connect the production district feed to show a resident-facing health recommendation." },
+      Rungkut: { aqi: "--", pm: "--", status: "Awaiting data", guidance: "Connect the production district feed to show a resident-facing health recommendation." }
+    };
+
+    function updateArea(name) {
+      const area = sampleAreas[name] || sampleAreas.Mulyorejo;
+      document.querySelectorAll("[data-area]").forEach((el) => el.textContent = name);
+      document.querySelectorAll("[data-aqi]").forEach((el) => el.textContent = area.aqi);
+      document.querySelectorAll("[data-pm]").forEach((el) => el.textContent = area.pm);
+      document.querySelectorAll("[data-status]").forEach((el) => el.textContent = area.status);
+      document.querySelectorAll("[data-guidance]").forEach((el) => el.textContent = area.guidance);
+      const note = document.getElementById("search-note");
+      if (note) note.textContent = `Focused on ${name}${name === "Mulyorejo" ? "" : " - data placeholder"}`;
+    }
+
+    function searchArea(event) {
+      event.preventDefault();
+      const input = document.getElementById("district-search");
+      const value = input.value.trim();
+      const match = Object.keys(sampleAreas).find((name) => name.toLowerCase() === value.toLowerCase());
+      updateArea(match || "Mulyorejo");
+      if (!match) {
+        input.value = "Mulyorejo";
+        document.getElementById("search-note").textContent = "Area not in prototype - showing Mulyorejo";
+      }
+    }
+
+    function setLayer(button) {
+      document.querySelectorAll(".layer-switch button").forEach((item) => item.classList.toggle("active", item === button));
+      const label = button.textContent.trim();
+      document.getElementById("search-note").textContent = `${label} selected - connect production layer`;
+    }
+
+    function resetPosition() {
+      updateArea("Mulyorejo");
+      const input = document.getElementById("district-search");
+      if (input) input.value = "Mulyorejo";
+    }
+
+    function toggleSheet() { document.getElementById("mobile-sheet").classList.toggle("peek"); }
+    function mobileSearch() {
+      const area = prompt("Find district", "Mulyorejo");
+      if (!area) return;
+      const match = Object.keys(sampleAreas).find((name) => name.toLowerCase() === area.trim().toLowerCase());
+      updateArea(match || "Mulyorejo");
+      document.getElementById("mobile-sheet").classList.remove("peek");
+    }
+    function openHistory() { document.getElementById("history-dialog").showModal(); }
+    function openInfo() { document.getElementById("info-dialog").showModal(); }
+    function closeDialog(id) { document.getElementById(id).close(); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://YOUR_CLOUDRUN_API_URL/api/:path*"
+    },
+    {
+      "source": "/api/tiles/:mapType/:z/:x/:y",
+      "destination": "https://YOUR_CLOUDRUN_API_URL/api/tiles/:mapType/:z/:x/:y"
+    },
+    {
+      "source": "/((?!assets/|data/|favicon.svg|icons.svg).*).*",
+      "destination": "/index.html"
+    }
+  ]
+}

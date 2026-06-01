@@ -522,10 +522,16 @@ const MapView = ({ focusedLocation, onResetLocation, onSelectLocation }) => {
   const handleReset = () => {
     setCenterMapTrigger(prev => prev + 1);
     setLocationError('');
+    setUserLocation(null);
     onResetLocation();
   };
 
   const handleLocateMe = () => {
+    if (userLocation) {
+      setUserLocation(null);
+      return;
+    }
+
     if (!navigator.geolocation) {
       setLocationError('Location access is not supported by this browser.');
       return;
@@ -726,7 +732,11 @@ const MapView = ({ focusedLocation, onResetLocation, onSelectLocation }) => {
             type="button"
             onClick={handleLocateMe}
             disabled={isLocating}
-            className="flex items-center gap-1.5 rounded-xl border border-[var(--resident-border)] bg-[var(--resident-surface)] p-2 text-xs font-semibold text-[var(--resident-fg)] shadow-[var(--resident-shadow)] transition-all hover:border-[var(--resident-border-strong)] disabled:cursor-wait disabled:opacity-70 sm:gap-2 sm:text-sm"
+            className={`flex items-center gap-1.5 rounded-xl border p-2 text-xs font-semibold shadow-[var(--resident-shadow)] transition-all sm:gap-2 sm:text-sm ${
+              userLocation
+                ? 'border-[var(--resident-border-strong)] bg-[var(--resident-accent-soft)] text-[var(--resident-accent-dark)]'
+                : 'border-[var(--resident-border)] bg-[var(--resident-surface)] text-[var(--resident-fg)] hover:border-[var(--resident-border-strong)]'
+            } disabled:cursor-wait disabled:opacity-70`}
           >
             {isLocating
               ? <Loader2 className="h-4 w-4 animate-spin text-[var(--resident-accent-dark)]" />
