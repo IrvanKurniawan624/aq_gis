@@ -1,6 +1,6 @@
 # Surabaya Air Quality GIS Dashboard
 
-[![Live Web Application](https://img.shields.github.com/badge/Live%20Demo-Vercel-brightgreen)](https://aq-gis-surabaya.vercel.app)
+[![Live Web Application](https://img.shields.io/badge/Live%20Demo-Vercel-brightgreen)](https://aq-gis-surabaya.vercel.app)
 
 A web-based geographic information system for monitoring air quality in Surabaya, Indonesia. It combines imported historical data with hourly live ingestion, provider-specific city summaries, Google Air Quality district estimates, and map-based visualization.
 
