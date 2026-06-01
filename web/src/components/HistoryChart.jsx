@@ -12,15 +12,20 @@ import {
 } from 'recharts';
 import { X, Loader2, Calendar } from 'lucide-react';
 
-function getAqiHexColor(aqi) {
-  if (aqi === null || aqi === undefined) return '#475569';
-  if (aqi <= 50) return '#10b981';
-  if (aqi <= 100) return '#eab308';
-  if (aqi <= 150) return '#f97316';
-  if (aqi <= 200) return '#ef4444';
-  if (aqi <= 300) return '#a855f7';
-  return '#881337';
-}
+const DISTRICT_SERIES_COLORS = [
+  '#9b6c2f',
+  '#16865a',
+  '#c85d3d',
+  '#4776a6',
+  '#8b5da7',
+  '#d38b25',
+  '#2f8d92',
+  '#b14f72',
+  '#6e7d37',
+  '#7c5c48',
+  '#5474c2',
+  '#b8672e',
+];
 
 function formatChartDate(
   dateValue,
@@ -48,18 +53,18 @@ const DistrictTooltip = ({ active, label, payload }) => {
   const remainingCount = Math.max(rankedValues.length - topValues.length, 0);
 
   return (
-    <div className="rounded-lg border border-slate-600 bg-slate-900/95 px-3 py-2 text-xs shadow-xl">
-      <p className="mb-2 font-semibold text-slate-100">{label}</p>
+    <div className="rounded-lg border border-[var(--resident-border)] bg-[var(--resident-surface)]/95 px-3 py-2 text-xs shadow-xl">
+      <p className="mb-2 font-semibold text-[var(--resident-fg)]">{label}</p>
       <div className="space-y-1">
         {topValues.map((item) => (
           <div key={item.name} className="flex items-center justify-between gap-4">
             <span style={{ color: item.color }}>{item.name}</span>
-            <span className="font-semibold text-slate-100">{Math.round(item.value)}</span>
+            <span className="font-semibold text-[var(--resident-fg)]">{Math.round(item.value)}</span>
           </div>
         ))}
       </div>
       {remainingCount > 0 && (
-        <p className="mt-2 text-slate-400">... +{remainingCount} more</p>
+        <p className="mt-2 text-[var(--resident-muted)]">... +{remainingCount} more</p>
       )}
     </div>
   );
@@ -148,11 +153,11 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
     }
 
     return Array.from(latestByName.entries())
-      .map(([name, row]) => ({
+      .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+      .map(([name], index) => ({
         name,
-        color: getAqiHexColor(row.us_aqi),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+        color: DISTRICT_SERIES_COLORS[index % DISTRICT_SERIES_COLORS.length],
+      }));
   }, [districtRows]);
 
   const districtChartData = useMemo(() => {
@@ -175,23 +180,24 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
   }, [districtRows]);
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/80 backdrop-blur-md p-4">
-      <div className="bg-slate-800 border border-slate-700 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-6 border-b border-slate-700/50 gap-4">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#493b2f]/25 p-4 backdrop-blur-sm">
+      <div className="flex w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border border-[var(--resident-border)] bg-[var(--resident-surface)] shadow-[var(--resident-shadow)]">
+        <div className="flex flex-col items-start justify-between gap-4 border-b border-[var(--resident-border)] p-6 sm:flex-row sm:items-center">
           <div>
-            <h2 className="text-xl font-bold text-white">Historical Air Quality</h2>
-            <p className="text-sm text-slate-400">{locationName} - {sourceLabel} Trends</p>
+            <p className="resident-eyebrow">Air quality trends</p>
+            <h2 className="mt-1 text-xl font-bold text-[var(--resident-fg)]">Historical Air Quality</h2>
+            <p className="text-sm text-[var(--resident-muted)]">{locationName} - {sourceLabel} trends</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-            <div className="flex overflow-hidden rounded-lg border border-slate-700/50 bg-slate-900/50 p-1">
+            <div className="flex overflow-hidden rounded-lg border border-[var(--resident-border)] bg-[var(--resident-surface-2)] p-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('city')}
                 className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
                   activeTab === 'city'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    ? 'bg-[var(--resident-accent)] text-[var(--resident-accent-dark)]'
+                    : 'text-[var(--resident-muted)] hover:bg-[var(--resident-surface)]'
                 }`}
               >
                 Surabaya Average
@@ -201,8 +207,8 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
                 onClick={() => setActiveTab('district')}
                 className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
                   activeTab === 'district'
-                    ? 'bg-blue-500 text-white'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    ? 'bg-[var(--resident-accent)] text-[var(--resident-accent-dark)]'
+                    : 'text-[var(--resident-muted)] hover:bg-[var(--resident-surface)]'
                 }`}
               >
                 Per District
@@ -210,21 +216,21 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
             </div>
 
             {activeTab === 'city' && (
-              <div className="flex items-center bg-slate-900/50 rounded-lg border border-slate-700/50 p-1">
-                <Calendar className="w-4 h-4 text-slate-500 ml-2" />
+              <div className="flex items-center rounded-lg border border-[var(--resident-border)] bg-[var(--resident-surface-2)] p-1">
+                <Calendar className="ml-2 h-4 w-4 text-[var(--resident-muted)]" />
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-transparent text-sm text-slate-200 focus:outline-none px-2 py-1.5 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                  className="bg-transparent px-2 py-1.5 text-sm text-[var(--resident-fg)] outline-none"
                   title="Start Date"
                 />
-                <span className="text-slate-500 px-1">-</span>
+                <span className="px-1 text-[var(--resident-muted)]">-</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-transparent text-sm text-slate-200 focus:outline-none px-2 py-1.5 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                  className="bg-transparent px-2 py-1.5 text-sm text-[var(--resident-fg)] outline-none"
                   title="End Date"
                 />
               </div>
@@ -233,7 +239,7 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
             <button
               type="button"
               onClick={onClose}
-              className="p-2 ml-auto hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
+              className="ml-auto rounded-full border border-[var(--resident-border)] p-2 text-[var(--resident-muted)] transition-colors hover:border-[var(--resident-border-strong)] hover:text-[var(--resident-fg)]"
             >
               <X className="w-6 h-6" />
             </button>
@@ -243,47 +249,47 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
         <div className="p-6 h-[500px] w-full">
           {activeTab === 'city' ? (
             loading ? (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
+              <div className="flex h-full w-full flex-col items-center justify-center text-[var(--resident-muted)]">
                 <Loader2 className="w-8 h-8 animate-spin mb-4" />
                 <p>Loading historical data...</p>
               </div>
             ) : data.length === 0 ? (
-              <div className="w-full h-full flex items-center justify-center text-slate-500">
+              <div className="flex h-full w-full items-center justify-center text-[var(--resident-muted)]">
                 <p>No historical data available for the selected date range.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e3d8c4" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    stroke="#94a3b8"
+                    stroke="#8b7962"
                     fontSize={12}
                     tickMargin={10}
                     minTickGap={30}
                   />
                   <YAxis
-                    stroke="#94a3b8"
+                    stroke="#8b7962"
                     fontSize={12}
                     tickFormatter={(val) => val}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#1e293b',
-                      borderColor: '#334155',
-                      color: '#f8fafc',
+                      backgroundColor: '#fffdf8',
+                      borderColor: '#d8c9ae',
+                      color: '#493b2f',
                       borderRadius: '0.5rem',
                     }}
-                    itemStyle={{ color: '#f8fafc' }}
+                    itemStyle={{ color: '#493b2f' }}
                   />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} />
                   <Line
                     type="monotone"
                     name="US AQI"
                     dataKey="us_aqi"
-                    stroke="#3b82f6"
+                    stroke="#9b6c2f"
                     strokeWidth={3}
-                    dot={{ r: 3, fill: '#3b82f6', strokeWidth: 0 }}
+                    dot={{ r: 3, fill: '#9b6c2f', strokeWidth: 0 }}
                     activeDot={{ r: 6 }}
                   />
                   <Line
@@ -306,28 +312,28 @@ const HistoryChart = ({ cityId, locationName, source, sourceLabel, onClose }) =>
               </ResponsiveContainer>
             )
           ) : districtLoading ? (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
+            <div className="flex h-full w-full flex-col items-center justify-center text-[var(--resident-muted)]">
               <Loader2 className="w-8 h-8 animate-spin mb-4" />
               <p>Loading district data...</p>
             </div>
           ) : districtChartData.length === 0 ? (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-center">
-              <p className="text-slate-300">No district-level data yet.</p>
+            <div className="flex h-full w-full flex-col items-center justify-center text-center text-[var(--resident-muted)]">
+              <p className="text-[var(--resident-fg)]">No district-level data yet.</p>
               <p className="text-sm">Add GOOGLE_AQ_API_KEY to enable per-kecamatan tracking.</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={districtChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e3d8c4" vertical={false} />
                 <XAxis
                   dataKey="date"
-                  stroke="#94a3b8"
+                  stroke="#8b7962"
                   fontSize={12}
                   tickMargin={10}
                   minTickGap={24}
                 />
                 <YAxis
-                  stroke="#94a3b8"
+                  stroke="#8b7962"
                   fontSize={12}
                   tickFormatter={(val) => val}
                 />

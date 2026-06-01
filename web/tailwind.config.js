@@ -7,13 +7,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#0f172a", // slate-900
-        card: "#1e293b", // slate-800
-        primary: "#3b82f6", // blue-500
-        accent: "#10b981", // emerald-500
+        background: "#fcfaf4",
+        card: "#fffdf8",
+        primary: "#e0b448",
+        accent: "#9b6c2f",
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        sans: ['Segoe UI', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       }
     },
   },

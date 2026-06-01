@@ -749,6 +749,10 @@ app.get('/api/kecamatan/history', async (req, res) => {
     const days = Number.isFinite(requestedDays) && requestedDays > 0
       ? requestedDays
       : getRetentionDays();
+    const requestedName = typeof req.query.name === 'string'
+      ? req.query.name.trim()
+      : '';
+    const nameFilter = requestedName ? ' AND k.name = ?' : '';
     const [rows] = await pool.execute(
       `
         SELECT
@@ -756,13 +760,16 @@ app.get('/api/kecamatan/history', async (req, res) => {
           kr.measured_on,
           ROUND(kr.us_aqi) as us_aqi,
           ROUND(kr.pm2_5, 1) as pm2_5,
-          ROUND(kr.pm10, 1) as pm10
+          ROUND(kr.pm10, 1) as pm10,
+          ROUND(kr.nitrogen_dioxide, 1) as nitrogen_dioxide,
+          ROUND(kr.ozone, 1) as ozone
         FROM kecamatan k
         JOIN kecamatan_readings kr ON kr.kecamatan_id = k.id
         WHERE kr.measured_on >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+          ${nameFilter}
         ORDER BY kr.measured_on ASC, k.name ASC
       `,
-      [days],
+      requestedName ? [days, requestedName] : [days],
     );
 
     res.json(rows);
