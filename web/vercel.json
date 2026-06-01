@@ -10,7 +10,7 @@
       "destination": "https://aq-gis-web-18726666384.us-central1.run.app/api/tiles/:mapType/:z/:x/:y"
     },
     {
-      "source": "/((?!assets/|data/|favicon.svg|icons.svg).*).*",
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ]
