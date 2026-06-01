@@ -3,11 +3,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://YOUR_CLOUDRUN_API_URL/api/:path*"
+      "destination": "https://aq-gis-web-18726666384.us-central1.run.app/api/:path*"
     },
     {
       "source": "/api/tiles/:mapType/:z/:x/:y",
-      "destination": "https://YOUR_CLOUDRUN_API_URL/api/tiles/:mapType/:z/:x/:y"
+      "destination": "https://aq-gis-web-18726666384.us-central1.run.app/api/tiles/:mapType/:z/:x/:y"
     },
     {
       "source": "/((?!assets/|data/|favicon.svg|icons.svg).*).*",
