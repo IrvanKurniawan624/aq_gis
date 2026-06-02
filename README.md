@@ -6,7 +6,9 @@ A web-based geographic information system for monitoring air quality in Surabaya
 
 **Live URL**: [https://aq-gis-surabaya.vercel.app](https://aq-gis-surabaya.vercel.app)
 
-![Dashboard Preview](./screenshot.png)
+<p align="center">
+  <img src="./screenshot.png" alt="Dashboard Preview" width="100%">
+</p>
 
 The application does not present modeled coordinates as physical sensors. Open-Meteo
 returns modeled air-quality data for a requested coordinate. Google Air Quality returns
